@@ -1,6 +1,6 @@
 # Texture Set Maker (TSMaker)
 A lightweight utility to speed up the process of creating a resource pack for Minecraft RTX by allowing you to quickly generate texture_set.json files.  
-Requires .NET +6.0
+Requires .NET +6.0 Runtime installed.
 
 # How To Use
 After running TextureSetMaker.exe, you will need to input the full directory of textures/blocks folder within your resource pack, all of the files will be automatically created & placed in your textures/blocks folder.  
@@ -11,5 +11,5 @@ Jsons for textures in blocks folder's subdirectories (e.g. textures in textures/
 
 Your textures are copied with proper suffixes that match the texture_set json files, so you may edit those instead and put everything in one folder after you are done editing.
 
-# Fun Fact
-This tiny project was the seed from which RTX Reactor sprouted.
+# Roadmap
+This tool will be moved to WinUI 3.0 in the future with more tools to generate and manage texture sets and speed up more parts of authoring a PBR resource pack.
