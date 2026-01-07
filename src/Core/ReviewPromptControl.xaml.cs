@@ -4,7 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Storage;
 
-namespace Vanilla_RTX_App.Core;
+namespace Texture_Set_Manager.Core;
 
 public sealed partial class ReviewPromptControl : UserControl
 {

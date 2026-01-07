@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Application x:Class="Vanilla_RTX_App.App"
+<Application x:Class="Texture_Set_Manager.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="using:Vanilla_RTX_App">
+             xmlns:local="using:Texture_Set_Manager">
     <Application.Resources>
         <ResourceDictionary>
             

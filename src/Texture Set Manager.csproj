@@ -1,9 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
-    <RootNamespace>Vanilla_RTX_App</RootNamespace>
+    <RootNamespace>Texture_Set_Manager</RootNamespace>
     <Platforms>x86;x64;ARM64</Platforms>
     <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
     <PublishProfile>win-$(Platform).pubxml</PublishProfile>
@@ -19,6 +19,61 @@
     <Content Remove="Assets\BadgeLogo.scale-200.png" />
     <Content Remove="Assets\BadgeLogo.scale-400.png" />
     <Content Remove="Assets\betterrtx.gif" />
+    <Content Remove="Assets\icons\BadgeLogo.scale-100.png" />
+    <Content Remove="Assets\icons\BadgeLogo.scale-125.png" />
+    <Content Remove="Assets\icons\BadgeLogo.scale-150.png" />
+    <Content Remove="Assets\icons\BadgeLogo.scale-200.png" />
+    <Content Remove="Assets\icons\BadgeLogo.scale-400.png" />
+    <Content Remove="Assets\icons\LargeTile.scale-100.png" />
+    <Content Remove="Assets\icons\LargeTile.scale-125.png" />
+    <Content Remove="Assets\icons\LargeTile.scale-150.png" />
+    <Content Remove="Assets\icons\LargeTile.scale-200.png" />
+    <Content Remove="Assets\icons\LargeTile.scale-400.png" />
+    <Content Remove="Assets\icons\SmallTile.scale-100.png" />
+    <Content Remove="Assets\icons\SmallTile.scale-125.png" />
+    <Content Remove="Assets\icons\SmallTile.scale-150.png" />
+    <Content Remove="Assets\icons\SmallTile.scale-200.png" />
+    <Content Remove="Assets\icons\SmallTile.scale-400.png" />
+    <Content Remove="Assets\icons\SplashScreen.scale-100.png" />
+    <Content Remove="Assets\icons\SplashScreen.scale-125.png" />
+    <Content Remove="Assets\icons\SplashScreen.scale-150.png" />
+    <Content Remove="Assets\icons\SplashScreen.scale-200.png" />
+    <Content Remove="Assets\icons\SplashScreen.scale-400.png" />
+    <Content Remove="Assets\icons\Square150x150Logo.scale-100.png" />
+    <Content Remove="Assets\icons\Square150x150Logo.scale-125.png" />
+    <Content Remove="Assets\icons\Square150x150Logo.scale-150.png" />
+    <Content Remove="Assets\icons\Square150x150Logo.scale-200.png" />
+    <Content Remove="Assets\icons\Square150x150Logo.scale-400.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.altform-lightunplated_targetsize-16.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.altform-lightunplated_targetsize-24.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.altform-lightunplated_targetsize-256.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.altform-lightunplated_targetsize-32.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.altform-lightunplated_targetsize-48.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.altform-unplated_targetsize-16.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.altform-unplated_targetsize-24.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.altform-unplated_targetsize-256.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.altform-unplated_targetsize-32.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.altform-unplated_targetsize-48.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.scale-100.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.scale-125.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.scale-150.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.scale-200.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.scale-400.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.targetsize-16.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.targetsize-24.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.targetsize-256.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.targetsize-32.png" />
+    <Content Remove="Assets\icons\Square44x44Logo.targetsize-48.png" />
+    <Content Remove="Assets\icons\StoreLogo.scale-100.png" />
+    <Content Remove="Assets\icons\StoreLogo.scale-125.png" />
+    <Content Remove="Assets\icons\StoreLogo.scale-150.png" />
+    <Content Remove="Assets\icons\StoreLogo.scale-200.png" />
+    <Content Remove="Assets\icons\StoreLogo.scale-400.png" />
+    <Content Remove="Assets\icons\Wide310x150Logo.scale-100.png" />
+    <Content Remove="Assets\icons\Wide310x150Logo.scale-125.png" />
+    <Content Remove="Assets\icons\Wide310x150Logo.scale-150.png" />
+    <Content Remove="Assets\icons\Wide310x150Logo.scale-200.png" />
+    <Content Remove="Assets\icons\Wide310x150Logo.scale-400.png" />
     <Content Remove="Assets\LargeTile.scale-100.png" />
     <Content Remove="Assets\LargeTile.scale-125.png" />
     <Content Remove="Assets\LargeTile.scale-150.png" />
@@ -142,6 +197,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Update="Assets\git-icon.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Update="Assets\icon.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Update="Assets\icons\BadgeLogo.scale-100.png">
@@ -331,6 +389,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Update="Assets\lighttheme.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Update="Assets\logo.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Update="Assets\missing.png">
@@ -692,6 +753,10 @@
     <None Update="Assets\LargeTile.scale-400.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="Assets\logo.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
     <None Update="Assets\netherite.png">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
@@ -1052,8 +1117,8 @@
     <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
     <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
     <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
-    <PackageIcon>vrtx.lamp.on.png</PackageIcon>
-    <ApplicationIcon>Assets\vrtx.lamp.on.ico</ApplicationIcon>
+    <PackageIcon>logo.png</PackageIcon>
+    <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <PackageReadmeFile>README.md</PackageReadmeFile>

@@ -35,7 +35,7 @@
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
         DisplayName="Texture Set Manager"
-        Description="Automatically update Vanilla RTX packages, tune them to your preferences, and launch Minecraft with RTX in one go."
+        Description="The texture set manager tool helps resource pack creators author PBR textures for their RTX or Vibrant Visuals resource packs flexibly, speeding up workflows."
         BackgroundColor="transparent"
         Square150x150Logo="Assets\icons\Square150x150Logo.png"
         Square44x44Logo="Assets\icons\Square44x44Logo.png">
@@ -46,7 +46,7 @@
             <uap:ShowOn Tile="square310x310Logo"/>
           </uap:ShowNameOnTiles>
         </uap:DefaultTile >
-        <uap:SplashScreen Image="Assets\icons\SplashScreen.png" />
+        <uap:SplashScreen Image="Assets\icons\SplashScreen.png"  BackgroundColor="transparent"/>
         <uap:LockScreen BadgeLogo="Assets\icons\BadgeLogo.png"  Notification="badge"/>
       </uap:VisualElements>
     </Application>

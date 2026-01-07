@@ -3,9 +3,9 @@ using System.Runtime.InteropServices;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Windows.Graphics;
-using static Vanilla_RTX_App.TunerVariables;
+using static Texture_Set_Manager.TunerVariables;
 
-namespace Vanilla_RTX_App.Core;
+namespace Texture_Set_Manager.Core;
 
 /// <summary>
 /// Window state manager
