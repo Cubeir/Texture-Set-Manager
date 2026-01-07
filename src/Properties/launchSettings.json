@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Texture Set Manager (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Texture Set Manager (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

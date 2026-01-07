@@ -1,3 +1,27 @@
+NOT AN OFFICIAL MINECRAFT PRODUCT.
+
+Third Party License(s)
+
+Newtonsoft.JSON
+https://github.com/JamesNK/Newtonsoft.Json/blob/master/LICENSE.md
+
+Magick.NET
+https://github.com/dlemstra/Magick.NET/blob/main/License.txt
+
+                            - - -               
+
+Vanilla RTX App - Copyright (c) June 2025 Cubeir
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, version 3.
+
+Files downloaded or modified by this software retain their original license as defined by their respective owners.
+
+This software is provided "as is", without any warranty.
+See the GNU General Public License for more details.
+
+
                     GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 
