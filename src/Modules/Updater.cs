@@ -173,7 +173,7 @@ public class CreditsUpdater
             using (HttpClient client = new HttpClient())
             {
                 client.Timeout = TimeSpan.FromSeconds(30);
-                string userAgent = $"Texture_Set_Manager_updater/{TunerVariables.appVersion} (https://github.com/Cubeir/Vanilla-RTX-App)";
+                string userAgent = $"Texture_Set_Manager_updater/{EnvironmentVariables.appVersion} (https://github.com/Cubeir/Vanilla-RTX-App)";
                 client.DefaultRequestHeaders.Add("User-Agent", userAgent);
 
                 var response = await client.GetAsync(README_URL);
@@ -266,7 +266,7 @@ public class PSAUpdater
                 using (HttpClient client = new HttpClient())
                 {
                     client.Timeout = TimeSpan.FromSeconds(30);
-                    var userAgent = $"Texture_Set_Manager_updater/{TunerVariables.appVersion} (https://github.com/Cubeir/Vanilla-RTX-App)";
+                    var userAgent = $"Texture_Set_Manager_updater/{EnvironmentVariables.appVersion} (https://github.com/Cubeir/Vanilla-RTX-App)";
                     client.DefaultRequestHeaders.Add("User-Agent", userAgent);
                     var response = await client.GetAsync(README_URL);
 

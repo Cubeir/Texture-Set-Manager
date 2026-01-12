@@ -7,16 +7,12 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         Title="Texture Set Manager"
         mc:Ignorable="d">
-    
+
     <Window.SystemBackdrop>
         <DesktopAcrylicBackdrop />
     </Window.SystemBackdrop>
 
     <Grid x:Name="MainGrid">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="2*" />
-            <ColumnDefinition Width="3*" />
-        </Grid.ColumnDefinitions>
 
         <!-- Splash Blocker -->
         <Grid x:Name="SplashOverlay"
@@ -28,37 +24,17 @@
 
             <Viewbox HorizontalAlignment="Stretch"
                      VerticalAlignment="Stretch"
-                     Margin="208, 164, 208, 164"
+                     Margin="128, 64, 128, 64"
                      Stretch="Uniform">
                 <Grid Width="256"
                       Height="256">
-                    <!-- Halo - Bottom layer -->
-                    <Image x:Name="SplashLampHalo"
-                           Source="ms-appx:///Assets/icons/SplashScreen.Halo.png"
-                           Width="1280"
-                           Height="1280"
-                           Margin="-512,-512,-512,-512"
-                           Opacity="0.175"
-                           Stretch="Uniform"
-                           Canvas.ZIndex="1"
-                           CacheMode="BitmapCache" />
-                    <!-- Base "On" - Middle layer -->
                     <Image x:Name="SplashLamp"
-                           Source="ms-appx:///Assets/icons/SplashScreen.Regular.png"
+                           Source="ms-appx:///Assets/icons/SplashScreen.png"
                            Width="192"
                            Height="192"
                            Opacity="1.0"
                            Stretch="Uniform"
                            Canvas.ZIndex="2"
-                           CacheMode="BitmapCache" />
-                    <!-- Super/Off overlay - Top layer -->
-                    <Image x:Name="SplashLampSuper"
-                           Source="ms-appx:///Assets/icons/SplashScreen.Super.png"
-                           Width="192"
-                           Height="192"
-                           Opacity="0.0"
-                           Stretch="Uniform"
-                           Canvas.ZIndex="3"
                            CacheMode="BitmapCache" />
                 </Grid>
             </Viewbox>
@@ -73,7 +49,7 @@
                 Visibility="{ThemeResource LightThemeBackgroundVisibility}"
                 Canvas.ZIndex="-1">
             <Border.Background>
-                <SolidColorBrush Color="#24373737" />
+                <SolidColorBrush Color="#2B373737" />
             </Border.Background>
         </Border>
 
@@ -102,7 +78,7 @@
 
             <!-- Transparent drag area: covers whole titlebar except left 200px so your buttons keep receiving clicks -->
             <Border x:Name="TitleBarDragArea"
-                    Margin="196,0,0,0"
+                    Margin="145,0,0,0"
                     Height="31"
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Top"
@@ -130,7 +106,7 @@
 
                 <!-- Base "On" image (always visible) -->
                 <Image x:Name="iconImageBox"
-                       Source="ms-appx:///Assets/logo.png"
+                       Source="ms-appx:///Assets/icon.png"
                        Height="20"
                        Width="20"
                        Canvas.Top="1"
@@ -138,6 +114,18 @@
                        Canvas.ZIndex="3"
                        IsHitTestVisible="False"
                        CacheMode="BitmapCache" />
+
+                <Button x:Name="IconInteractionButton"
+                        Background="Transparent"
+                        BorderBrush="Transparent"
+                        Canvas.Left="0.5"
+                        Canvas.Top="1"
+                        Opacity="0.0"
+                        Height="20"
+                        Width="20"
+                        Canvas.ZIndex="5"
+                        CornerRadius="0"
+                        Click="SidebarLogCopyButton_Click" />
             </Canvas>
 
             <TextBlock x:Name="TitleBarText"
@@ -153,14 +141,8 @@
 
 
 
-        <!-- LEFT CONTENT AREA -->
-        <Grid Grid.Column="0"
-              x:Name="LeftContentGrid">
-            <!-- Shadow receiver for left column -->
-            <Grid x:Name="LeftShadowReceiver"
-                  IsHitTestVisible="False"
-                  Background="Transparent" />
-
+        <!-- CONTENT AREA -->
+        <Grid x:Name="ContentGrid">
             <!-- Titlebar Buttons -->
             <Border x:Name="CommandBarButtonsShadowReceiver"
                     Margin="-2,-2,16,0"
@@ -177,10 +159,6 @@
                       BorderThickness="1"
                       CornerRadius="4">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <!-- Button -->
-                        <ColumnDefinition Width="Auto" />
-                        <!-- Separator -->
                         <ColumnDefinition Width="Auto" />
                         <!-- Button -->
                         <ColumnDefinition Width="Auto" />
@@ -216,31 +194,9 @@
                             Margin="4,6,4,6"
                             Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
-                    <!-- Info/Help Button -->
-                    <Button x:Name="HelpButton"
-                            Grid.Column="2"
-                            FontFamily="Segoe Fluent Icons"
-                            Style="{StaticResource SubtleButtonStyle}"
-                            Content="&#xE946;"
-                            Width="43"
-                            Height="35"
-                            CornerRadius="0"
-                            FontSize="16"
-                            Click="HelpButton_Click"
-                            PointerEntered="HelpButton_PointerEntered"
-                            PointerExited="HelpButton_PointerExited"
-                            ToolTipService.ToolTip="Documentation"
-                            IsTextScaleFactorEnabled="False" />
-
-                    <!-- Separator -->
-                    <Border Grid.Column="3"
-                            Width="1"
-                            Margin="4,6,4,6"
-                            Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-
                     <!-- Donate Button -->
                     <Button x:Name="DonateButton"
-                            Grid.Column="4"
+                            Grid.Column="2"
                             FontFamily="Segoe Fluent Icons"
                             Style="{StaticResource SubtleButtonStyle}"
                             Content="&#xEB51;"
@@ -257,14 +213,14 @@
                             IsTextScaleFactorEnabled="False" />
 
                     <!-- Separator -->
-                    <Border Grid.Column="5"
+                    <Border Grid.Column="3"
                             Width="1"
                             Margin="4,6,4,6"
                             Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
                     <!-- Theme Button -->
                     <Button x:Name="CycleThemeButton"
-                            Grid.Column="6"
+                            Grid.Column="4"
                             FontFamily="Segoe Fluent Icons"
                             Style="{StaticResource SubtleButtonStyle}"
                             Content="&#xEC46;"
@@ -279,24 +235,299 @@
                             IsTextScaleFactorEnabled="False" />
                 </Grid>
             </Border>
-            
-        </Grid>
-        
 
-        <!-- RIGHT CONTENT AREA -->
-        <Grid Grid.Column="1">
-            <!-- Shadow receiver for right column -->
-            <Grid x:Name="RightShadowReceiver"
-                  IsHitTestVisible="False"
-                  Background="Transparent" />
-            
-            <!-- Sidebar Log Box -->
+            <!-- Controls Grid -->
+            <Grid x:Name="ControlsGrid"
+                  Margin="16,56,16,16"
+                  VerticalAlignment="Stretch"
+                  HorizontalAlignment="Stretch">
+
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- Select Folders / Select Files & Clear Split Button -->
+                <Border x:Name="SelectFoldersButtonsShadowHost"
+                        Grid.Row="0"
+                        Margin="0, 0 ,0 ,12"
+                        VerticalAlignment="Top"
+                        Height="60"
+                        Translation="0,0,24"
+                        CornerRadius="4">
+                    <Border.Shadow>
+                        <ThemeShadow x:Name="SelectFoldersButtonsShadow" />
+                    </Border.Shadow>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1*" />
+                            <ColumnDefinition Width="6" />
+                            <ColumnDefinition Width="1*" />
+                            <ColumnDefinition Width="6" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Button x:Name="SelectFoldersButton"
+                                Grid.Column="0"
+                                Click="SelectFoldersButton_Click"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                CornerRadius="4,0,0,4"
+                                BorderThickness="0"
+                                IsTextScaleFactorEnabled="False"
+                                ToolTipService.ToolTip="Select folders containing texture sets">
+                            <StackPanel Orientation="Horizontal"
+                                        HorizontalAlignment="Center">
+                                <FontIcon Glyph="&#xE8B7;"
+                                          FontSize="16"
+                                          Margin="0,0,8,0"
+                                          VerticalAlignment="Center" />
+                                <TextBlock Text="Select folders"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+
+                        <Button x:Name="SelectFilesButton"
+                                Grid.Column="2"
+                                Click="SelectFilesButton_Click"
+                                FontWeight="SemiBold"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                CornerRadius="0,0,0,0"
+                                BorderThickness="0"
+                                IsTextScaleFactorEnabled="False"
+                                ToolTipService.ToolTip="Select individual texture files">
+                            <StackPanel Orientation="Horizontal"
+                                        HorizontalAlignment="Center">
+                                <FontIcon Glyph="&#xF56E;"
+                                          FontSize="16"
+                                          Margin="0,0,8,0"
+                                          VerticalAlignment="Center" />
+                                <TextBlock Text="Select files"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Clear Selection Button -->
+                        <Button x:Name="ClearSelectionButton"
+                                Grid.Column="4"
+                                Click="ClearSelectionButton_Click"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                Width="60"
+                                CornerRadius="0,4,4,0"
+                                BorderThickness="0"
+                                IsTextScaleFactorEnabled="False"
+                                ToolTipService.ToolTip="Clear selection">
+                            <FontIcon Glyph="&#xEA99;"
+                                      FontSize="18"
+                                      VerticalAlignment="Center" />
+                        </Button>
+
+                        <!-- Overlay borders for the visual split -->
+                        <Grid Grid.Column="0"
+                              HorizontalAlignment="Right"
+                              Width="3"
+                              Margin="0,0,-3,0"
+                              IsHitTestVisible="False">
+                            <Rectangle Fill="{ThemeResource ButtonBackgroundThemeBrush}" />
+                            <Border BorderBrush="{ThemeResource FakeSplitButtonDarkBorderColor}"
+                                    BorderThickness="3,0,0,0" />
+                        </Grid>
+
+                        <Grid Grid.Column="2"
+                              HorizontalAlignment="Left"
+                              Width="3"
+                              Margin="-3,0,0,0"
+                              IsHitTestVisible="False">
+                            <Rectangle Fill="{ThemeResource ButtonBackgroundThemeBrush}" />
+                            <Border BorderBrush="{ThemeResource FakeSplitButtonBrightBorderColor}"
+                                    BorderThickness="3,0,0,0" />
+                        </Grid>
+
+                        <Grid Grid.Column="4"
+                              HorizontalAlignment="Left"
+                              Width="3"
+                              Margin="-3,0,0,0"
+                              IsHitTestVisible="False">
+                            <Rectangle Fill="{ThemeResource ButtonBackgroundThemeBrush}" />
+                            <Border BorderBrush="{ThemeResource FakeSplitButtonBrightBorderColor}"
+                                    BorderThickness="3,0,0,0" />
+                        </Grid>
+
+                        <Grid Grid.Column="2"
+                              HorizontalAlignment="Right"
+                              Width="3"
+                              Margin="0,0,-3,0"
+                              IsHitTestVisible="False">
+                            <Rectangle Fill="{ThemeResource ButtonBackgroundThemeBrush}" />
+                            <Border BorderBrush="{ThemeResource FakeSplitButtonDarkBorderColor}"
+                                    BorderThickness="3,0,0,0" />
+                        </Grid>
+                    </Grid>
+                </Border>
+
+
+                <!-- Secondary PBR Map Dropdown and SSS Toggle -->
+                <Border x:Name="SecondaryPBRMapShadowHost"
+                        Grid.Row="1"
+                        Margin="0,4,0,0"
+                        VerticalAlignment="Top"
+                        Height="40"
+                        Translation="0,0,22"
+                        CornerRadius="4">
+                    <Border.Shadow>
+                        <ThemeShadow x:Name="SecondaryPBRMapShadow" />
+                    </Border.Shadow>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1*" />
+                            <ColumnDefinition Width="6" />
+                            <!-- 4px gap between buttons -->
+                            <ColumnDefinition Width="0.6*" />
+                        </Grid.ColumnDefinitions>
+
+                        <DropDownButton x:Name="SecondaryPBRMapDropDown"
+                                        Grid.Column="0"
+                                        Content="Secondary PBR Map"
+                                        HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Stretch"
+                                        FontWeight="SemiBold"
+                                        CornerRadius="4,0,0,4"
+                                        BorderThickness="0"
+                                        IsTextScaleFactorEnabled="False"
+                                        ToolTipService.ToolTip="Select secondary PBR map type">
+                            <DropDownButton.Flyout>
+                                <MenuFlyout Placement="Bottom">
+                                    <MenuFlyoutItem Text="None"
+                                                    Click="SecondaryPBRMapOption_Click" />
+                                    <MenuFlyoutItem Text="Normal map"
+                                                    Click="SecondaryPBRMapOption_Click" />
+                                    <MenuFlyoutItem Text="Heightmap"
+                                                    Click="SecondaryPBRMapOption_Click" />
+                                </MenuFlyout>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+
+                        <!-- SSS Toggle -->
+                        <ToggleButton x:Name="IncludeSubsurfaceScatteringToggle"
+                                      Grid.Column="2"
+                                      Content="Subsurface scattering"
+                                      Checked="IncludeSubsurfaceScatteringToggle_Checked"
+                                      Unchecked="IncludeSubsurfaceScatteringToggle_Unchecked"
+                                      HorizontalAlignment="Stretch"
+                                      VerticalAlignment="Stretch"
+                                      FontWeight="SemiBold"
+                                      CornerRadius="0,4,4,0"
+                                      BorderThickness="0"
+                                      Height="40"
+                                      Margin="0,0,0,0"
+                                      IsTextScaleFactorEnabled="False">
+                            <ToggleButton.ContentTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal"
+                                                HorizontalAlignment="Center">
+                                        <FontIcon Glyph=""
+                                                  FontSize="16"
+                                                  Margin="0,0,8,0"
+                                                  VerticalAlignment="Center" />
+                                        <TextBlock Text="Subsurface scattering"
+                                                   FontWeight="SemiBold"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ToggleButton.ContentTemplate>
+                        </ToggleButton>
+
+                        <!-- Overlay borders for the visual split -->
+                        <!-- Dark border on RIGHT edge of left button -->
+                        <Grid Grid.Column="0"
+                              HorizontalAlignment="Right"
+                              Width="3"
+                              Margin="0,0,-3,0"
+                              IsHitTestVisible="False">
+                            <Rectangle Fill="{ThemeResource ButtonBackgroundThemeBrush}" />
+                            <Border BorderBrush="{ThemeResource FakeSplitButtonDarkBorderColor}"
+                                    BorderThickness="3,0,0,0" />
+                        </Grid>
+
+                        <!-- Bright border on LEFT edge of right button -->
+                        <Grid Grid.Column="2"
+                              HorizontalAlignment="Left"
+                              Width="3"
+                              Margin="-3,0,0,0"
+                              IsHitTestVisible="False">
+                            <Rectangle Fill="{ThemeResource ButtonBackgroundThemeBrush}" />
+                            <Border BorderBrush="{ThemeResource FakeSplitButtonBrightBorderColor}"
+                                    BorderThickness="3,0,0,0"
+                                    x:Name="LeftEdgeOfSSSButton" />
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <!-- Toggle Switches -->
+                <Grid Grid.Row="2"
+                      Margin="0,16,0,0"
+                      HorizontalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.25*" />
+                        <ColumnDefinition Width="1*" />
+                        <ColumnDefinition Width="1*" />
+                        <ColumnDefinition Width="1*" />
+                    </Grid.ColumnDefinitions>
+
+                    <ToggleSwitch x:Name="ProcessSubfoldersToggle"
+                                  Margin="4"
+                                  Grid.Column="0"
+                                  Header="Process subfolders"
+                                  IsOn="True"
+                                  OffContent=""
+                                  OnContent=""
+                                  IsTextScaleFactorEnabled="False" />
+
+                    <ToggleSwitch x:Name="SmartFiltersToggle"
+                                  Margin="4"
+                                  Grid.Column="1"
+                                  Header="Smart filters"
+                                  IsOn="True"
+                                  OffContent=""
+                                  OnContent=""
+                                  IsTextScaleFactorEnabled="False" />
+
+                    <ToggleSwitch x:Name="ConvertToTGAToggle"
+                                  Margin="4"
+                                  Grid.Column="2"
+                                  Header="Convert to TGA"
+                                  IsOn="True"
+                                  OffContent=""
+                                  OnContent=""
+                                  IsTextScaleFactorEnabled="False" />
+
+                    <ToggleSwitch x:Name="CreateBackupToggle"
+                                  Margin="4"
+                                  Grid.Column="3"
+                                  Header="Create backup"
+                                  IsOn="true"
+                                  OffContent=""
+                                  OnContent=""
+                                  IsTextScaleFactorEnabled="False" />
+                </Grid>
+
+            </Grid>
+
+            <!-- Sidebar Log Box + Generate Button split -->
             <Grid>
                 <Border x:Name="SidebarLogShadowHost"
-                        Margin="16,55,16,16"
+                        Margin="16,321,16,16"
                         VerticalAlignment="Stretch"
                         HorizontalAlignment="Stretch"
-                        Translation="0,0,64"
+                        Translation="0,0,24"
                         BorderThickness="0"
                         CornerRadius="6">
                     <Border.Shadow>
@@ -306,33 +537,77 @@
 
                 <!-- Textbox -->
                 <TextBox x:Name="SidebarLog"
-                         Margin="16,55,16,16"
+                         Margin="16,321,16,16"
                          VerticalAlignment="Stretch"
                          HorizontalAlignment="Stretch"
+                         BorderThickness="0"
                          TextWrapping="Wrap"
                          IsTabStop="False"
+                         TextAlignment="Center"
                          AcceptsReturn="True"
                          IsReadOnly="True"
                          AllowFocusOnInteraction="True"
                          ScrollViewer.VerticalScrollBarVisibility="Auto"
-                         Padding="12,12,12,138"
                          IsTextScaleFactorEnabled="False"
-                         ToolTipService.ToolTip="Relevant logs appear here to inform, guide, or warn the user while using the app. Double click the art area to copy logs to clipboard." />
+                         ToolTipService.ToolTip="Relevant logs appear here to inform, guide, or warn the user while using the app. Double click the art area to copy logs to clipboard."
+                         CornerRadius="0,0,6,6" />
+
+
+                <!-- Overlay borders for the visual split -->
+                <Grid HorizontalAlignment="Stretch"
+                      VerticalAlignment="Top"
+                      Margin="16,313,16,0"
+                      IsHitTestVisible="False">
+                    <Rectangle Fill="{ThemeResource ButtonBackgroundThemeBrush}" />
+                    <Border BorderBrush="{ThemeResource FakeSplitButtonDarkBorderColor}"
+                            BorderThickness="0,4,0,0" />
+                </Grid>
+
+                <Grid HorizontalAlignment="Stretch"
+                      VerticalAlignment="Top"
+                      Margin="16,317,16,0"
+                      IsHitTestVisible="False">
+                    <Rectangle Fill="{ThemeResource ButtonBackgroundThemeBrush}" />
+                    <Border BorderBrush="{ThemeResource FakeSplitButtonBrightBorderColor}"
+                            BorderThickness="0,4,0,0" />
+                </Grid>
+
+
+                <!-- Generate Button -->
+                <Button x:Name="GenerateButton"
+                        Grid.Row="4"
+                        Content="Generate"
+                        Click="GenerateButton_Click"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Top"
+                        Margin="16,273,16,0"
+                        CornerRadius="5, 5, 0 ,0"
+                        BorderThickness="0"
+                        Height="40">
+                    <Button.ContentTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal"
+                                        HorizontalAlignment="Center">
+                                <FontIcon Glyph="&#xF4A5;"
+                                          FontSize="16"
+                                          Margin="0,0,8,0"
+                                          VerticalAlignment="Center" />
+                                <TextBlock Text="Generate"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </Button.ContentTemplate>
+                    <Button.Shadow>
+                        <ThemeShadow x:Name="GenerateButtonShadow" />
+                    </Button.Shadow>
+
+
+                </Button>
+
             </Grid>
-
-            <!-- Progress Bar -->
-            <ProgressBar x:Name="ProgressBar"
-                         Margin="16,55,16,0"
-                         VerticalAlignment="Top"
-                         HorizontalAlignment="Stretch"
-                         IsIndeterminate="False"
-                         ShowPaused="False"
-                         ShowError="False" />
-
-
         </Grid>
-              
-        
-        
+
+
     </Grid>
 </Window>

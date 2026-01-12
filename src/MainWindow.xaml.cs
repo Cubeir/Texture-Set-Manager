@@ -1,19 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI;
-using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -21,157 +15,92 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
-using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Storage.Pickers;
+using Windows.Storage;
+using Windows.ApplicationModel.DataTransfer;
 using Texture_Set_Manager.Core;
 using Texture_Set_Manager.Modules;
-using Windows.ApplicationModel.DataTransfer;
 using Windows.Graphics;
-using Windows.Storage;
-using Windows.System;
 using Windows.UI;
-using static System.Runtime.InteropServices.JavaScript.JSType;
-using static Texture_Set_Manager.Core.WindowControlsManager;
-using static Texture_Set_Manager.TunerVariables;
-using static Texture_Set_Manager.TunerVariables.Persistent;
+using static Texture_Set_Manager.EnvironmentVariables;
+using static Texture_Set_Manager.EnvironmentVariables.Persistent;
 
 namespace Texture_Set_Manager;
 
 /*
-### GENERAL TODO & IDEAS ###
-
-- Is the lamp halo too weak at rest? it seems inconsistent, during runtime reglar flash halos are very bright
-watchya doing?
-
-- Add a way to add custom presets to BetterRTX Manager (e.g. user made presets)
-Give it special treatment same as default preset and avoid changing existing logic
-they appear at the bottom
-expects zips or rtpacks to be passed in, extracts bins and makes a custom preset, name em custom_preset_[increment]
-basically, instead of changing the current pipeline, integerate this/build it on top of it
-that way it'll surely work without fucking things up
-
-- Do what you promised:
-https://github.com/Cubeir/Vanilla-RTX/issues/60
-
-- https://discord.com/channels/721377277480402985/1455281964138369054/1455548708123840604
-Does the app stop working if Minecraft, for whatever the reason, is named weirdly?
-Should the GDKLocator's behavior be updated to: just find the game's exe?
-But then, how do we differentiate preview and release?
-
-and
-- https://discord.com/channels/721377277480402985/1453451223599546399
-there were some more reports on Discord
-
-Investigate, and after all changes, TEST the whole thing again
-locator, manual locator, all steps, on diff drives, deep in subfolders up to 9, on a busy last drive/worst case
-And lastly the CACHE invalidator, will it continue to work well with it (betterrtx cache invalidator)
-
-- Update the docs to be less verbose, more accurate and helpful instead, cut off unneeded details.
-
-- Further review PackUpdater and BetterRTX manager codes, ensure no stone is left unturned.
-Especially release builds
-Game detection and cache invalidation could be improved for both
-PackUpdater may have blindspots still, though HIGHLY unlikely, still, review and test, make changes on the go
-
-- Go over Main Window again some time, especially update ToggleControls usage, its... weird to say the least
-Be more CONSISTENT with it, and ensure sidebarlogbox NEVER EVER EVER gets disabled on the main window!
-Some overrides now disable it while they should not.
-
-- Unify the 4 places hardcoded paths are used into a class
-pack updater, pack locator, pack browser, launcher, they deal with hardcoded paths, what else? (Ask copilot to scry the code)
-
-For finding the game, GDKLocator kit handles it system-wide, all good
-**For Minecraft's USER DATA however, you better expose those, apparently some third party launchers use different paths!!!**
-
-For GDKLocator, and wherever it is used, you could still expose the SPECIFIC file and folder names it looks for
-Actually don't expose anything, the overhead and the risk, instead, make them globally-available constants that can easily be changed
-so in the event of Minecraft files restructuing, you can quickly release an update without having to do much testing, make the code clear, basically
-This Applies to this older todo below as well:
-
-- Expose as many params as you can to a json in app's root
-the URLs the app sends requests to + the hardcoded Minecraft paths
-* Resource packs only end up in shared
-* Options file is in both shared and non-shared, but non-shared is presumably the one that takes priority, still, we take care of both
-* PackLocator, PackUpdater (deployer), Browse Packs, and LaunchMinecraftRTX's options.txt updater are the only things that rely on hardcoded paths on the system
-* EXPOSE ALL hardcoded URLs and Tuning parameters
-
-Additionally, while going through params, 
-Examine your github usage patterns (caching, and cooldowns) -- especially updater, maximize up-to-dateness with as few requests as possible
-All settled there? ensure there isn't a way the app can ddos github AND at the same time there are no unintended Blind spots
-
-- Do the TODOs scattered in the code
-
-- With splash screen here, UpdateUI is useless, getting rid of it is too much work though, just too much...
-It is too integerated, previewer class has some funky behavior tied to it, circumvented by it
-It's a mess but it works perfectly, so, only fix it once you have an abundance of time...!
-
-In fact, manually calling UpdateUI is NECESSERY, thank GOD you're not using bindings
-UpdateUI is VERY NEEDED for Previewer class, it is already implemented everywhere and freezes vessel updates as necessery
-You would've had to manually done this anyway
-
-And the smooth transitions are worth it.
-
-- A cool "Gradual logger" -- log texts gradually but very quickly! It helps make it less overwhelming when dumping huge logs
-Besides that you're gonna need something to unify the logging
-A public variable that gets all text dumped to perhaps, and gradually writes out its contents to sidebarlog whenever it is changed, async
-This way direct interaction with non-UI threads will be zero
-Long running tasks dump their text, UI thread gradually writes it out on its own.
-only concern is performance with large logs
-This idea can be a public static method and it won't ever ever block Ui thread
-A variable is getting constantly updated with new logs, a worker in main UI thread's only job is to write out its content as it comes along
-
-^ yeah lets dedicate more code clutter to visual things
-
-- Set random preview arts on startup, featuring locations from Vanilla RTX's history (Autumn's End, Pale Horizons, Bevy of Bugs, etc...)
-Or simple pixel arts you'd like to make in the same style
-Have 5-10 made
-
-- Tuner could, in theory, use the MANIFEST.JSON's metadata (i.e. TOOLS USED param) to MARK packs
-e.g. you can preserve their tuning histories there, embed it into the manifest, like for ambient lighting toggle
-
-- Account for different font scalings, windows accessibility settings, etc...
-gonna need lots of painstakingly redoing xamls but if one day you have an abundance of time sure why not
+ * let the rainbow gear be the icon and have it constantly spin VERY slowly ramping up with time
+ * e.g. if app is left on for 30 minutes, it gets VERY FAST, its a good easter egg because this app is usually opened and closed quickly
+ * 
+ * All remainin implementaion detes
+ * 
+ * Finish the layout, hook everything up right
+ * Got folders, got files, they remain stored separately, cleared by the clear button, not persistent
+ * 
+ * Actually they get cleared automatically upon generation completion
+ * its just that, make sure the design is able and safe to MEND existing packs!
+ * 
+ * Select files/folders are able to POOL UP files indefinitely and independantly, i.e. able to recieve arrays yes, can store arrays-of-arrays
+ * or just append the god damn arrays, lmao, dont convolute it!
+ * The whole pool gets passed down for processing
+ *
+ * 
+ * process subfolders becomes persistent // update updateui
+ * 
+ * the actual texture set maker, use the current code in ToolKit
+ * 
+ * It generates with latest format version, the texture set, and the desginated PBR maps in the same directory as the color texture!!!
+ * No more extra folder creation!
+ * 
+ * If the color texture already ends with _mer, _mers, _heightmap or _normal (but not _normal_normal, have that smart thing copied from vrtx app's processors)
+ * Use that to AVOID generating a texture set for it! call it "Smart Filters" place it next to  process subfolders, make space in the same row
+ * enabled by default same as process subfolders
+ * 
+ * ACTUALLY, move clear selection to be a smaller button next to GENERATE button, 3-way fake split, new!
+ * This opens space for ANOTHER toggle switch: Create Backup, it backs up the SOURCE folder into 
+ * 
+ * Add another toggle switch (that makes 4), to "Convert to TGA" on by default, converts all images to TGA, both the original color texture, and the PBR sets
 */
 
-public static class TunerVariables
+public static class EnvironmentVariables
 {
     public static string? appVersion = null;
 
-    public static string VanillaRTXLocation = string.Empty;
-    public static string VanillaRTXNormalsLocation = string.Empty;
-    public static string VanillaRTXOpusLocation = string.Empty;
-    public static string CustomPackLocation = string.Empty;
-
-    public static string VanillaRTXVersion = string.Empty;
-    public static string VanillaRTXNormalsVersion = string.Empty;
-    public static string VanillaRTXOpusVersion = string.Empty;
-    public static string CustomPackDisplayName = string.Empty;
-    // We already know names of Vanilla RTX packs so we get version instead, for custom pack, name's enough.
-    // We invalidate the retrieved name whenever we want to disable processing of the custom pack, so it has multiple purposes
-
-    // Tied to checkboxes
-    public static bool IsVanillaRTXEnabled = false;
-    public static bool IsNormalsEnabled = false;
-    public static bool IsOpusEnabled = false;
-
-    public static string HaveDeployableCache = "";
+    public static string[]? selectedFiles = null;
+    public static string[]? selectedFolders = null;
 
     // These variables are saved and loaded, they persist
     public static class Persistent
     {
-        public static string AppThemeMode = "Dark";
+        public static bool enableSSS = Defaults.enableSSS;
+        public static string SecondaryPBRMapType = Defaults.SecondaryPBRMapType;
+
+        public static bool ProcessSubfolders = Defaults.ProcessSubfolders;
+        public static bool SmartFilters = Defaults.SmartFilters;
+        public static bool ConvertToTarga = Defaults.ConvertToTarga;
+        public static bool CreateBackup = Defaults.CreateBackup;
+
+        public static string AppThemeMode = Defaults.AppThemeMode;
     }
 
-    // Defaults are backed up to be used as a compass by other classes
+    // Defaults are backed up to be used as a compass
     public static class Defaults
     {
+        public const bool enableSSS = false;
+        public const string SecondaryPBRMapType = "none";
 
+        public const bool ProcessSubfolders = true;
+        public const bool SmartFilters = true;
+        public const bool ConvertToTarga = true;
+        public const bool CreateBackup = true;
+
+        public const string AppThemeMode = "Dark";
     }
 
     // Set Window size default for all windows
-    public const int WindowSizeX = 1105;
-    public const int WindowSizeY = 555;
-    public const int WindowMinSizeX = 970;
-    public const int WindowMinSizeY = 555;
+    public const int WindowSizeX = 640;
+    public const int WindowSizeY = 384;
+    public const int WindowMinSizeX = 640;
+    public const int WindowMinSizeY = 384;
 
     // Saves persistent variables
     public static void SaveSettings()
@@ -218,14 +147,9 @@ public sealed partial class MainWindow : Window
 
     private readonly WindowStateManager _windowStateManager;
 
-    private readonly ProgressBarManager _progressManager;
-
-
     [DllImport("user32.dll")]
     public static extern uint GetDpiForWindow(IntPtr hWnd);
 
-    private Dictionary<FrameworkElement, string> _originalTexts = new();
-    private bool _shiftPressed = false;
 
     // ---------------------------------------| | | | | | | | | | |-------------------------------------------- \\
 
@@ -245,7 +169,6 @@ public sealed partial class MainWindow : Window
         }
 
         _windowStateManager = new WindowStateManager(this, false, msg => Log(msg));
-        _progressManager = new ProgressBarManager(ProgressBar);
 
         Instance = this;
 
@@ -256,7 +179,7 @@ public sealed partial class MainWindow : Window
         var version = Windows.ApplicationModel.Package.Current.Id.Version;
         var versionString = $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
         appVersion = versionString;
-        Log($"App Version: {versionString}");
+        Log($"Version: {versionString}");
 
         // Do upon app closure
         this.Closed += (s, e) =>
@@ -279,14 +202,13 @@ public sealed partial class MainWindow : Window
         // If one day something goes on the background that needs waiting, increase this, it delays the flash
         await Task.Delay(50);
 
-        InitializeShadows();
 
         LoadSettings();
 
         // APPLY THEME if it isn't a button click they won't cycle and apply the loaded setting instead
         CycleThemeButton_Click(null, null);
 
-
+        UpdateUI(0.001);
 
         // lazy credits and PSA retriever, credits are saved for donate hover event, PSA is shown when ready
         _ = CreditsUpdater.GetCredits(false);
@@ -301,12 +223,20 @@ public sealed partial class MainWindow : Window
 
 
         // Brief delay to ensure everything is fully rendered, then fade out splash screen
-        await Task.Delay(750);
+        await Task.Delay(640);
         // ================ Do all UI updates you DON'T want to be seen BEFORE here, and what you want seen AFTER ======================= 
         await FadeOutSplashScreen();
 
         // Show Leave a Review prompt, has a 10 sec cd built in
         _ = ReviewPromptManager.InitializeAsync(MainGrid);
+
+        await Task.Delay(50);
+        StartLogoSpinner();
+        await Task.Delay(50);
+        if (iconImageBox?.RenderTransform is RotateTransform rotateTransform)
+        {
+            rotateTransform.Angle = rotationAngle;
+        }
 
         async Task FadeOutSplashScreen()
         {
@@ -388,6 +318,25 @@ public sealed partial class MainWindow : Window
             titleBar.ButtonPressedBackgroundColor = isLight
                 ? Color.FromArgb(40, 0, 0, 0)
                 : Color.FromArgb(60, 255, 255, 255);
+
+
+            // Color of that little border next to the button 🍝
+            if (enableSSS)
+            {
+                LeftEdgeOfSSSButton.BorderBrush = new SolidColorBrush((Color)Application.Current.Resources["SystemAccentColorLight3"]);
+            }
+            else
+            {
+                var themeKey = theme == ElementTheme.Light ? "Light" : "Dark";
+                var themeDictionaries = Application.Current.Resources.ThemeDictionaries;
+                if (themeDictionaries.TryGetValue(themeKey, out var themeDict) && themeDict is ResourceDictionary dict)
+                {
+                    if (dict.TryGetValue("FakeSplitButtonBrightBorderColor", out var colorObj) && colorObj is Color color)
+                    {
+                        LeftEdgeOfSSSButton.BorderBrush = new SolidColorBrush(color);
+                    }
+                }
+            }
         });
 
 
@@ -416,10 +365,73 @@ public sealed partial class MainWindow : Window
     }
 
 
-    private void InitializeShadows()
+
+    private double rotationAngle = 0.0;
+    private DispatcherTimer rotationTimer;
+    private DispatcherTimer speedIncrementTimer;
+    private double currentSpeedDegreesPerSecond = 0.0;
+    private const int AccelerationIntervalMs = 750; // How frequently acceleration happens
+    private const double SpeedIncrementDegreesPerMinute = 0.5; // How much acceleration (in extra degrees per min)
+    private const int AnimationFrameIntervalMs = 7; // (1000/X ≈ FPS)
+    private void StartLogoSpinner()
     {
-        TitleBarShadow.Receivers.Add(TitleBarShadowReceiver);
+        var random = new Random();
+        double directionMultiplier = random.Next(2) == 0 ? 1.0 : -1.0;
+
+        // Create a RotateTransform on the image with center rotation
+        var rotateTransform = new RotateTransform();
+
+        // Set the center point to the center of the image (10,10 for 20x20 image)
+        rotateTransform.CenterX = 10;  // Half of image width
+        rotateTransform.CenterY = 10;  // Half of image height
+
+        iconImageBox.RenderTransform = rotateTransform;
+
+        // Timer for updating rotation angle (30+ FPS)
+        rotationTimer = new DispatcherTimer();
+        rotationTimer.Interval = TimeSpan.FromMilliseconds(AnimationFrameIntervalMs);
+        rotationTimer.Tick += (s, e) =>
+        {
+            // Update rotation angle based on current speed
+            rotationAngle += currentSpeedDegreesPerSecond * (AnimationFrameIntervalMs / 1000.0);
+
+            // Apply transform to image
+            rotateTransform.Angle = rotationAngle;
+        };
+        rotationTimer.Start();
+
+        // Timer for incrementing speed every minute
+        speedIncrementTimer = new DispatcherTimer();
+        speedIncrementTimer.Interval = TimeSpan.FromMilliseconds(AccelerationIntervalMs);
+        speedIncrementTimer.Tick += (s, e) =>
+        {
+            currentSpeedDegreesPerSecond += SpeedIncrementDegreesPerMinute * directionMultiplier;
+        };
+        speedIncrementTimer.Start();
     }
+
+
+
+    public async void UpdateUI(double animationDurationSeconds = 0.15)
+    {
+        // Match bool-based UI elements to their current bools
+        ProcessSubfoldersToggle.IsOn = Persistent.ProcessSubfolders;
+        SmartFiltersToggle.IsOn = Persistent.SmartFilters;
+        ConvertToTGAToggle.IsOn = Persistent.ConvertToTarga;
+        CreateBackupToggle.IsOn = Persistent.CreateBackup;
+
+        // Dropdwon and SSS
+        IncludeSubsurfaceScatteringToggle.IsChecked = Persistent.enableSSS;
+        string displayText = Persistent.SecondaryPBRMapType switch
+        {
+            "none" => "None",
+            "normalmap" => "Normal Map",
+            "heightmap" => "Heightmap",
+            _ => "None"
+        };
+        SecondaryPBRMapDropDown.Content = $"Secondary PBR texture: {displayText}";
+    }
+
 
 
     public enum LogLevel
@@ -511,34 +523,13 @@ public sealed partial class MainWindow : Window
     }
 
 
-    #endregion -------------------------------
+
 
     private void ChatButton_Click(object sender, RoutedEventArgs e)
     {
         Log("Here is the invitation!\nDiscord.gg/A4wv4wwYud", LogLevel.Informational);
         OpenUrl("https://discord.gg/A4wv4wwYud");
     }
-
-
-    private void HelpButton_Click(object sender, RoutedEventArgs e)
-    {
-        Log("Find helpful resources in the README file, launching in your default browser shortly.", LogLevel.Informational);
-        OpenUrl("https://github.com/Cubeir/Vanilla-RTX-App/blob/main/README.md");
-    }
-    private void HelpButton_PointerEntered(object sender, PointerRoutedEventArgs e)
-    {
-        HelpButton.Content = "\uF167";
-        if (RuntimeFlags.Set("Wrote_Info_Thingy"))
-        {
-            Log("Open a page with full documentation of the app and a how-to guide.", LogLevel.Informational);
-        }
-    }
-    private void HelpButton_PointerExited(object sender, PointerRoutedEventArgs e)
-    {
-        HelpButton.Content = "\uE946";
-    }
-
-
     private void DonateButton_Click(object sender, RoutedEventArgs e)
     {
         DonateButton.Content = "\uEB52";
@@ -568,12 +559,10 @@ public sealed partial class MainWindow : Window
             Log(credits);
         }
     }
-
-
     public void CycleThemeButton_Click(object? sender, RoutedEventArgs? e)
     {
         bool invokedByClick = sender is Button;
-        string mode = TunerVariables.Persistent.AppThemeMode;
+        string mode = EnvironmentVariables.Persistent.AppThemeMode;
 
         if (invokedByClick)
         {
@@ -583,7 +572,7 @@ public sealed partial class MainWindow : Window
                 "Light" => "Dark",
                 _ => "System"
             };
-            TunerVariables.Persistent.AppThemeMode = mode;
+            EnvironmentVariables.Persistent.AppThemeMode = mode;
         }
 
         var root = MainWindow.Instance.Content as FrameworkElement;
@@ -620,5 +609,193 @@ public sealed partial class MainWindow : Window
         ToolTipService.SetToolTip(btn, "Theme: " + mode);
     }
 
+    #endregion -------------------------------
+    private void SelectFoldersButton_Click(object sender, RoutedEventArgs e)
+    {
 
+    }
+    private void SelectFilesButton_Click(object sender, RoutedEventArgs e)
+    {
+
+    }
+    private void ClearSelectionButton_Click(object sender, RoutedEventArgs e)
+    {
+
+    }
+
+
+
+
+
+    private void IncludeSubsurfaceScatteringToggle_Checked(object sender, RoutedEventArgs e)
+    {
+        enableSSS = true;
+        Log("Enabled Subsurface Scattering", LogLevel.Informational);
+
+        LeftEdgeOfSSSButton.BorderBrush = new SolidColorBrush((Color)Application.Current.Resources["SystemAccentColorLight3"]);
+    }
+    private void IncludeSubsurfaceScatteringToggle_Unchecked(object sender, RoutedEventArgs e)
+    {
+        enableSSS = false;
+        Log("Disabled Subsurface Scattering", LogLevel.Informational);
+
+        // Color of that little border next to the button
+        var theme = LeftEdgeOfSSSButton.ActualTheme;
+        var themeKey = theme == ElementTheme.Light ? "Light" : "Dark";
+        var themeDictionaries = Application.Current.Resources.ThemeDictionaries;
+        if (themeDictionaries.TryGetValue(themeKey, out var themeDict) && themeDict is ResourceDictionary dict)
+        {
+            if (dict.TryGetValue("FakeSplitButtonBrightBorderColor", out var colorObj) && colorObj is Color color)
+            {
+                LeftEdgeOfSSSButton.BorderBrush = new SolidColorBrush(color);
+            }
+        }
+    }
+
+
+    private void SecondaryPBRMapOption_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuFlyoutItem item)
+        {
+            string selectedValue = item.Text.ToLowerInvariant(); // normalize input
+            var mapType = selectedValue switch
+            {
+                "none" => "none",
+                "normal map" => "normalmap",
+                "heightmap" => "heightmap",
+                _ => "none"
+            };
+            EnvironmentVariables.Persistent.SecondaryPBRMapType = mapType;
+            Log($"Selected secondary PBR map type: {mapType}", LogLevel.Informational);
+            EnvironmentVariables.SaveSettings();
+
+            // For consistency should have manually updated the text here, but this is faster
+            // Generally updateUI should only be used when variables change in the background WITHOUT the control itself being touched
+            // Because it's whole job is to refresh ALL CONTROLS at once based on their persistent memory variables
+            UpdateUI();
+        }
+    }
+
+
+    private void GenerateButton_Click(object sender, RoutedEventArgs e)
+    {
+
+    }
+
+
+    private void SidebarLogCopyButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(SidebarLog.Text))
+            {
+                var sb = new StringBuilder();
+                // Original sidebar log (important status messages)
+                sb.AppendLine("===== Sidebar Log (UI-shown Messages)");
+                sb.AppendLine(SidebarLog.Text);
+                sb.AppendLine();
+                // Tuner variables
+                sb.AppendLine("===== Tuner Variables");
+                var fields = typeof(EnvironmentVariables).GetFields(BindingFlags.Public | BindingFlags.Static);
+                foreach (var field in fields)
+                {
+                    var value = field.GetValue(null);
+                    sb.AppendLine($"{field.Name}: {value ?? "null"}");
+                }
+                sb.AppendLine();
+                // Persistent variables
+                sb.AppendLine("===== Persistent Variables");
+                var persistentFields = typeof(EnvironmentVariables.Persistent).GetFields(BindingFlags.Public | BindingFlags.Static);
+                foreach (var field in persistentFields)
+                {
+                    var value = field.GetValue(null);
+                    sb.AppendLine($"{field.Name}: {value ?? "null"}");
+                }
+                sb.AppendLine();
+                // Trace logs
+                sb.AppendLine(TraceManager.GetAllTraceLogs());
+
+                // UI Controls State
+                sb.AppendLine();
+                sb.AppendLine("===== UI Controls State");
+                CollectUIControlsState(sb);
+
+                var dataPackage = new DataPackage();
+                dataPackage.SetText(sb.ToString());
+                Clipboard.SetContent(dataPackage);
+                Log("Copied debug logs to clipboard.", LogLevel.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"Error during lamp interaction debug copy: {ex}", LogLevel.Error);
+        }
+        void CollectUIControlsState(StringBuilder sb)
+        {
+            var fields = this.GetType().GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+
+            foreach (var field in fields)
+            {
+                var value = field.GetValue(this);
+                if (value == null) continue;
+
+                var type = value.GetType();
+                var name = field.Name;
+
+                // Toggle-type controls
+                if (value is ToggleButton toggleBtn)
+                {
+                    sb.AppendLine($"{name} (ToggleButton): {toggleBtn.IsChecked?.ToString() ?? "null"}");
+                }
+                else if (value is CheckBox checkBox)
+                {
+                    sb.AppendLine($"{name} (CheckBox): {checkBox.IsChecked?.ToString() ?? "null"}");
+                }
+                else if (value is ToggleSwitch toggleSwitch)
+                {
+                    sb.AppendLine($"{name} (ToggleSwitch): {toggleSwitch.IsOn}");
+                }
+                else if (value is RadioButton radioBtn)
+                {
+                    sb.AppendLine($"{name} (RadioButton): {radioBtn.IsChecked?.ToString() ?? "null"}");
+                }
+                // Value controls
+                else if (value is Slider slider)
+                {
+                    sb.AppendLine($"{name} (Slider): {slider.Value}");
+                }
+                else if (value is NumberBox numberBox)
+                {
+                    sb.AppendLine($"{name} (NumberBox): {numberBox.Value}");
+                }
+                else if (value is ComboBox comboBox)
+                {
+                    sb.AppendLine($"{name} (ComboBox): SelectedIndex={comboBox.SelectedIndex}, SelectedItem={comboBox.SelectedItem?.ToString() ?? "null"}");
+                }
+                else if (value is TextBox textBox)
+                {
+                    var text = textBox.Text;
+                    if (!string.IsNullOrEmpty(text) && text.Length > 50)
+                        text = text.Substring(0, 50) + "...";
+                    sb.AppendLine($"{name} (TextBox): \"{text}\"");
+                }
+                else if (value is RatingControl rating)
+                {
+                    sb.AppendLine($"{name} (RatingControl): {rating.Value}");
+                }
+                else if (value is ColorPicker colorPicker)
+                {
+                    sb.AppendLine($"{name} (ColorPicker): {colorPicker.Color}");
+                }
+                else if (value is DatePicker datePicker)
+                {
+                    sb.AppendLine($"{name} (DatePicker): {datePicker.Date}");
+                }
+                else if (value is TimePicker timePicker)
+                {
+                    sb.AppendLine($"{name} (TimePicker): {timePicker.Time}");
+                }
+            }
+        }
+    }
 }

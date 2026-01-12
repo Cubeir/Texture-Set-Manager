@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Windows.Graphics;
-using static Texture_Set_Manager.TunerVariables;
+using static Texture_Set_Manager.EnvironmentVariables;
 
 namespace Texture_Set_Manager.Core;
 
