@@ -198,7 +198,8 @@
                             Click="DonateButton_Click"
                             PointerEntered="DonateButton_PointerEntered"
                             PointerExited="DonateButton_PointerExited"
-                            ToolTipService.ToolTip="Buy the developer some coffee, Vanilla RTX is free and continued, help keep it that way!"
+                            ToolTipService.ToolTip="Buy the developer some coffee.
+                            (makes him really happy!)"
                             IsTextScaleFactorEnabled="False" />
 
                     <!-- Separator -->
@@ -486,6 +487,7 @@
                                   IsOn="True"
                                   OffContent=""
                                   OnContent=""
+                                  Toggled="ProcessSubfoldersToggle_Toggled"
                                   IsTextScaleFactorEnabled="False" />
 
                     <ToggleSwitch x:Name="SmartFiltersToggle"
@@ -496,6 +498,7 @@
                                   IsOn="True"
                                   OffContent=""
                                   OnContent=""
+                                  Toggled="SmartFiltersToggle_Toggled"
                                   IsTextScaleFactorEnabled="False" />
 
                     <ToggleSwitch x:Name="ConvertToTGAToggle"
@@ -505,6 +508,7 @@
                                   IsOn="True"
                                   OffContent=""
                                   OnContent=""
+                                  Toggled="ConvertToTGAToggle_Toggled"
                                   IsTextScaleFactorEnabled="False" />
 
                     <ToggleSwitch x:Name="CreateBackupToggle"
@@ -514,6 +518,7 @@
                                   IsOn="true"
                                   OffContent=""
                                   OnContent=""
+                                  Toggled="CreateBackupToggle_Toggled"
                                   IsTextScaleFactorEnabled="False" />
                 </Grid>
 

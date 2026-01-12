@@ -31,27 +31,30 @@ namespace Texture_Set_Manager;
 /*
  * All remainin implementaion detes
  * 
- * Finish the layout, hook everything up right
+ * hook everything up right
 
- * Actually they get cleared automatically upon generation completion
+ * Actually selections should get cleared automatically upon generation completion
  * its just that, make sure the design is able and safe to MEND existing packs!
  * 
  * 
  * all toggles becomes persistent // update updateui, review it all, see if all that must be persistent, is persistent indeed
  * 
- * the actual texture set maker, use the current code in ToolKit
+ * the actual texture set maker, use the current code in ToolKit as a start
  * 
  * It generates with latest format version, the texture set, and the desginated PBR maps in the same directory as the color texture!!!
- * No more extra folder creation!
+ * No more extra folder creation! all is dumped onto the base dir
  * 
+ * if backup is on, backs up the entire given parent folder -- for files a separate zip containing the files!
+ * 
+ * If convert to TGA is on, runs Targify on them before any further moves -- otherwise the texture sets are made with copies of the original format
+ * perfect semantic design
+ * 
+ * if search dubdirs is on, it searches all subdirs of the given dir
+ * 
+ * if smart filters are on:
  * If the color texture already ends with _mer, _mers, _heightmap or _normal (but not _normal_normal, have that smart thing copied from vrtx app's processors)
  * Use that to AVOID generating a texture set for it! call it "Smart Filters" place it next to  process subfolders, make space in the same row
  * enabled by default same as process subfolders
- * 
- * ACTUALLY, move clear selection to be a smaller button next to GENERATE button, 3-way fake split, new!
- * This opens space for ANOTHER toggle switch: Create Backup, it backs up the SOURCE folder into 
- * 
- * Add another toggle switch (that makes 4), to "Convert to TGA" on by default, converts all images to TGA, both the original color texture, and the PBR sets
 */
 
 public static class EnvironmentVariables
@@ -93,9 +96,9 @@ public static class EnvironmentVariables
 
     // Set Window size default for all windows
     public const int WindowSizeX = 640;
-    public const int WindowSizeY = 384;
+    public const int WindowSizeY = 392;
     public const int WindowMinSizeX = 640;
-    public const int WindowMinSizeY = 384;
+    public const int WindowMinSizeY = 392;
 
     // Saves persistent variables
     public static void SaveSettings()
@@ -200,9 +203,11 @@ public sealed partial class MainWindow : Window
 
         LoadSettings();
 
-        // APPLY THEME if it isn't a button click they won't cycle and apply the loaded setting instead
+        // APPLY THEME [if it isn't a button click they won't cycle and apply the loaded setting instead]
         CycleThemeButton_Click(null, null);
 
+        // Update the UI
+        UpdateUI();
 
         // lazy credits and PSA retriever, credits are saved for donate hover event, PSA is shown when ready
         _ = CreditsUpdater.GetCredits(false);
@@ -215,8 +220,6 @@ public sealed partial class MainWindow : Window
             }
         });
 
-        await Task.Delay(100);
-        UpdateUI(0.001);
         // Brief delay to ensure everything is fully rendered, then fade out splash screen
         await Task.Delay(500);
         // ================ Do all UI updates you DON'T want to be seen BEFORE here, and what you want seen AFTER ======================= 
@@ -407,17 +410,17 @@ public sealed partial class MainWindow : Window
 
 
 
-    public async void UpdateUI(double animationDurationSeconds = 0.15)
+    public async void UpdateUI()
     {
         // Match bool-based UI elements to their current bools
-        ProcessSubfoldersToggle.IsOn = Persistent.ProcessSubfolders;
-        SmartFiltersToggle.IsOn = Persistent.SmartFilters;
-        ConvertToTGAToggle.IsOn = Persistent.ConvertToTarga;
-        CreateBackupToggle.IsOn = Persistent.CreateBackup;
+        ProcessSubfoldersToggle.IsOn = ProcessSubfolders;
+        SmartFiltersToggle.IsOn = SmartFilters;
+        ConvertToTGAToggle.IsOn = ConvertToTarga;
+        CreateBackupToggle.IsOn = CreateBackup;
 
         // Dropdwon and SSS
-        IncludeSubsurfaceScatteringToggle.IsChecked = Persistent.enableSSS;
-        string displayText = Persistent.SecondaryPBRMapType switch
+        IncludeSubsurfaceScatteringToggle.IsChecked = enableSSS;
+        string displayText = SecondaryPBRMapType switch
         {
             "none" => "None",
             "normalmap" => "Normal Map",
@@ -522,7 +525,7 @@ public sealed partial class MainWindow : Window
 
     private void ChatButton_Click(object sender, RoutedEventArgs e)
     {
-        Log("Here is the invitation!\nDiscord.gg/A4wv4wwYud", LogLevel.Informational);
+        Log("Here is the invitation: https://Discord.gg/A4wv4wwYud", LogLevel.Informational);
         OpenUrl("https://discord.gg/A4wv4wwYud");
     }
     private void DonateButton_Click(object sender, RoutedEventArgs e)
@@ -1039,5 +1042,29 @@ public sealed partial class MainWindow : Window
                 }
             }
         }
+    }
+
+    private void ProcessSubfoldersToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        var toggle = sender as ToggleSwitch;
+        ProcessSubfolders = toggle.IsOn;
+    }
+
+    private void SmartFiltersToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        var toggle = sender as ToggleSwitch;
+        SmartFilters = toggle.IsOn;
+    }
+
+    private void ConvertToTGAToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        var toggle = sender as ToggleSwitch;
+        ConvertToTarga = toggle.IsOn;
+    }
+
+    private void CreateBackupToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        var toggle = sender as ToggleSwitch;
+        CreateBackup = toggle.IsOn;
     }
 }

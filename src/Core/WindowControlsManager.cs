@@ -18,7 +18,6 @@ public class WindowControlsManager
     // Global exclusion list - controls with these names are always ignored
     private static readonly HashSet<string> _globalExclusions = new()
         {
-            "HelpButton",
             "DonateButton",
             "ChatButton",
             "CycleThemeButton",

@@ -44,7 +44,7 @@
                            LineHeight="20"
                            TextAlignment="Center"
                            Foreground="{ThemeResource TextFillColorPrimaryBrush}">
-                    <Run Text="Has the app been useful? Help keep it going with a" />
+                    <Run Text="Have you found Texture Set Manager useful? Support my projects through a" />
                     <Hyperlink x:Name="DonationLink"
                                UnderlineStyle="None">
                         <Run Text="donation"
