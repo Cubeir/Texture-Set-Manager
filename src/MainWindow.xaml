@@ -114,18 +114,6 @@
                        Canvas.ZIndex="3"
                        IsHitTestVisible="False"
                        CacheMode="BitmapCache" />
-
-                <Button x:Name="IconInteractionButton"
-                        Background="Transparent"
-                        BorderBrush="Transparent"
-                        Canvas.Left="0.5"
-                        Canvas.Top="1"
-                        Opacity="0.0"
-                        Height="20"
-                        Width="20"
-                        Canvas.ZIndex="5"
-                        CornerRadius="0"
-                        Click="SidebarLogCopyButton_Click" />
             </Canvas>
 
             <TextBlock x:Name="TitleBarText"
@@ -143,6 +131,7 @@
 
         <!-- CONTENT AREA -->
         <Grid x:Name="ContentGrid">
+
             <!-- Titlebar Buttons -->
             <Border x:Name="CommandBarButtonsShadowReceiver"
                     Margin="-2,-2,16,0"
@@ -250,6 +239,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
+
 
                 <!-- Select Folders / Select Files & Clear Split Button -->
                 <Border x:Name="SelectFolderButtonsShadowHost"
@@ -376,6 +366,7 @@
                             <Border BorderBrush="{ThemeResource FakeSplitButtonDarkBorderColor}"
                                     BorderThickness="3,0,0,0" />
                         </Grid>
+
                     </Grid>
                 </Border>
 
@@ -553,12 +544,28 @@
                          TextAlignment="Center"
                          AcceptsReturn="True"
                          IsReadOnly="True"
+                         Padding="0, 8 ,0 ,0"
                          AllowFocusOnInteraction="True"
                          ScrollViewer.VerticalScrollBarVisibility="Auto"
                          IsTextScaleFactorEnabled="False"
                          ToolTipService.ToolTip="Relevant logs appear here to inform, guide, or warn the user while using the app. Double click the art area to copy logs to clipboard."
                          CornerRadius="0,0,6,6" />
-
+                <Button x:Name="LogCopyButton"
+                        Background="Transparent"
+                        BorderBrush="Transparent"
+                        VerticalAlignment="Stretch"
+                        HorizontalAlignment="Stretch"
+                        Opacity="0.3"
+                        BorderThickness="0"
+                        Margin="16,321,32,16"
+                        Height="Auto"
+                        Width="Auto"
+                        Visibility="Visible"
+                        IsHitTestVisible="True"
+                        Canvas.ZIndex="999"
+                        CornerRadius="0,0,0,6"
+                        IsDoubleTapEnabled="True"
+                        Click="LogCopyButton_Click"/>
 
                 <!-- Overlay borders for the visual split -->
                 <Grid HorizontalAlignment="Stretch"
@@ -608,8 +615,6 @@
                     <Button.Shadow>
                         <ThemeShadow x:Name="GenerateButtonShadow" />
                     </Button.Shadow>
-
-
                 </Button>
 
             </Grid>

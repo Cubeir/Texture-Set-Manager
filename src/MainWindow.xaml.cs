@@ -29,23 +29,15 @@ using System.Linq.Expressions;
 namespace Texture_Set_Manager;
 
 /*
- * let the rainbow gear be the icon and have it constantly spin VERY slowly ramping up with time
- * e.g. if app is left on for 30 minutes, it gets VERY FAST, its a good easter egg because this app is usually opened and closed quickly
- * 
  * All remainin implementaion detes
  * 
  * Finish the layout, hook everything up right
- * Got folders, got files, they remain stored separately, cleared by the clear button, not persistent
- * 
+
  * Actually they get cleared automatically upon generation completion
  * its just that, make sure the design is able and safe to MEND existing packs!
  * 
- * Select files/folders are able to POOL UP files indefinitely and independantly, i.e. able to recieve arrays yes, can store arrays-of-arrays
- * or just append the god damn arrays, lmao, dont convolute it!
- * The whole pool gets passed down for processing
- *
  * 
- * process subfolders becomes persistent // update updateui
+ * all toggles becomes persistent // update updateui, review it all, see if all that must be persistent, is persistent indeed
  * 
  * the actual texture set maker, use the current code in ToolKit
  * 
@@ -211,7 +203,6 @@ public sealed partial class MainWindow : Window
         // APPLY THEME if it isn't a button click they won't cycle and apply the loaded setting instead
         CycleThemeButton_Click(null, null);
 
-        UpdateUI(0.001);
 
         // lazy credits and PSA retriever, credits are saved for donate hover event, PSA is shown when ready
         _ = CreditsUpdater.GetCredits(false);
@@ -224,9 +215,10 @@ public sealed partial class MainWindow : Window
             }
         });
 
-
+        await Task.Delay(100);
+        UpdateUI(0.001);
         // Brief delay to ensure everything is fully rendered, then fade out splash screen
-        await Task.Delay(640);
+        await Task.Delay(500);
         // ================ Do all UI updates you DON'T want to be seen BEFORE here, and what you want seen AFTER ======================= 
         await FadeOutSplashScreen();
 
@@ -374,7 +366,7 @@ public sealed partial class MainWindow : Window
     private DispatcherTimer speedIncrementTimer;
     private double currentSpeedDegreesPerSecond = 0.0;
     private const int AccelerationIntervalMs = 500; // How frequently acceleration happens
-    private const double SpeedIncrementDegreesPerMinute = 1.0; // How much acceleration (in extra degrees per min)
+    private const double SpeedIncrementDegreesPerMinute = 1.0; // How much acceleration (in extra degrees to spin per min)
     private const int AnimationFrameIntervalMs = 7; // (1000/X ≈ FPS)
     private void StartLogoSpinner()
     {
@@ -933,7 +925,7 @@ public sealed partial class MainWindow : Window
     }
 
 
-    private void SidebarLogCopyButton_Click(object sender, RoutedEventArgs e)
+    private void LogCopyButton_Click(object sender, RoutedEventArgs e)
     {
         try
         {
@@ -978,7 +970,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Log($"Error during lamp interaction debug copy: {ex}", LogLevel.Error);
+            Log($"Error during debug log copy: {ex}", LogLevel.Error);
         }
         void CollectUIControlsState(StringBuilder sb)
         {
