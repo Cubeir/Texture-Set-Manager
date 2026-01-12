@@ -24,6 +24,7 @@ using Windows.Graphics;
 using Windows.UI;
 using static Texture_Set_Manager.EnvironmentVariables;
 using static Texture_Set_Manager.EnvironmentVariables.Persistent;
+using System.Linq.Expressions;
 
 namespace Texture_Set_Manager;
 
@@ -66,7 +67,9 @@ public static class EnvironmentVariables
     public static string? appVersion = null;
 
     public static string[]? selectedFiles = null;
-    public static string[]? selectedFolders = null;
+    public static string? selectedFolder = null;
+
+    public static readonly string[] supportedFileExtensions = { ".tga", ".png", ".jpg", ".jpeg" };
 
     // These variables are saved and loaded, they persist
     public static class Persistent
@@ -370,8 +373,8 @@ public sealed partial class MainWindow : Window
     private DispatcherTimer rotationTimer;
     private DispatcherTimer speedIncrementTimer;
     private double currentSpeedDegreesPerSecond = 0.0;
-    private const int AccelerationIntervalMs = 750; // How frequently acceleration happens
-    private const double SpeedIncrementDegreesPerMinute = 0.5; // How much acceleration (in extra degrees per min)
+    private const int AccelerationIntervalMs = 500; // How frequently acceleration happens
+    private const double SpeedIncrementDegreesPerMinute = 1.0; // How much acceleration (in extra degrees per min)
     private const int AnimationFrameIntervalMs = 7; // (1000/X ≈ FPS)
     private void StartLogoSpinner()
     {
@@ -610,17 +613,264 @@ public sealed partial class MainWindow : Window
     }
 
     #endregion -------------------------------
-    private void SelectFoldersButton_Click(object sender, RoutedEventArgs e)
+    private async void SelectFolderButton_Click(object sender, RoutedEventArgs e)
     {
+        if (sender is Button button)
+        {
+            try
+            {
+                // disable the button to avoid double-clicking
+                button.IsEnabled = false;
+
+                selectedFolder = null;
+
+                var picker = new Microsoft.Windows.Storage.Pickers.FolderPicker(button.XamlRoot.ContentIslandEnvironment.AppWindowId);
+
+                picker.CommitButtonText = "Pick a folder";
+                picker.SuggestedStartLocation = (Microsoft.Windows.Storage.Pickers.PickerLocationId)PickerLocationId.Desktop;
+                picker.ViewMode = (Microsoft.Windows.Storage.Pickers.PickerViewMode)PickerViewMode.Thumbnail;
+
+                // Show the picker dialog window
+                var folder = await picker.PickSingleFolderAsync();
+                selectedFolder = folder.Path;
+
+                Log("Selected: " + selectedFolder, LogLevel.Success);
+            }
+            catch(Exception ex)
+            {
+                Trace.WriteLine(ex);
+            }
+            finally
+            {
+                button.IsEnabled = true;
+            }
+        }
 
     }
-    private void SelectFilesButton_Click(object sender, RoutedEventArgs e)
+    private void SelectFolderButton_DragOver(object sender, DragEventArgs e)
     {
+        e.AcceptedOperation = DataPackageOperation.Link;
 
+        // Check if the dragged items contain folders
+        var deferral = e.GetDeferral();
+        try
+        {
+            if (e.DataView.Contains(StandardDataFormats.StorageItems))
+            {
+                // Get the storage items to check if they're folders
+                var items = e.DataView.GetStorageItemsAsync().AsTask().Result;
+
+                // If any item is a folder, allow the drop
+                bool hasFolder = false;
+                foreach (var item in items)
+                {
+                    if (item is StorageFolder)
+                    {
+                        hasFolder = true;
+                        break;
+                    }
+                }
+
+                e.Handled = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine(ex);
+        }
+        finally
+        {
+            deferral.Complete();
+        }
     }
+    private async void SelectFolderButton_Drop(object sender, DragEventArgs e)
+    {
+        if (sender is Button button)
+        {
+            try
+            {
+                // Disable the button to avoid double-clicking
+                button.IsEnabled = false;
+
+                selectedFolder = null;
+
+                var items = await e.DataView.GetStorageItemsAsync();
+
+                // Check if we have any items and if the first one is a folder
+                if (items.Count > 0)
+                {
+                    var item = items[0];
+                    if (item is StorageFolder folder)
+                    {
+                        selectedFolder = folder.Path;
+                        Log("Selected: " + selectedFolder, LogLevel.Success);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine(ex);
+            }
+            finally
+            {
+                button.IsEnabled = true;
+            }
+        }
+    }
+
+
+    private async void SelectFilesButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button button)
+        {
+            try
+            {
+                // Disable the button to avoid double-clicking
+                button.IsEnabled = false;
+
+                selectedFiles = null;
+
+                var picker = new Microsoft.Windows.Storage.Pickers.FileOpenPicker(button.XamlRoot.ContentIslandEnvironment.AppWindowId);
+
+                picker.CommitButtonText = "Pick color textures";
+                picker.SuggestedStartLocation = (Microsoft.Windows.Storage.Pickers.PickerLocationId)PickerLocationId.Desktop;
+                picker.ViewMode = (Microsoft.Windows.Storage.Pickers.PickerViewMode)PickerViewMode.Thumbnail;
+                foreach (string filetype in supportedFileExtensions)
+                {
+                    picker.FileTypeFilter.Add(filetype);
+                }
+
+
+                // Show the picker dialog window
+                var files = await picker.PickMultipleFilesAsync();
+
+                if (files.Count > 0)
+                {
+                    // Convert StorageFile objects to file paths (strings)
+                    var filePaths = new List<string>();
+                    foreach (var file in files)
+                    {
+                        filePaths.Add(file.Path);
+                    }
+                    selectedFiles = filePaths.ToArray();
+                    string fileOrFiles = filePaths.Count > 1 ? "files" : "file";
+                    Log($"Selected {files.Count} {fileOrFiles}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine(ex);
+            }
+            finally
+            {
+                button.IsEnabled = true;
+            }
+        }
+    }
+    private void SelectFilesButton_DragOver(object sender, DragEventArgs e)
+    {
+        e.AcceptedOperation = DataPackageOperation.Link;
+
+        var deferral = e.GetDeferral();
+        try
+        {
+            if (e.DataView.Contains(StandardDataFormats.StorageItems))
+            {
+                // Get the storage items to check file extensions
+                var items = e.DataView.GetStorageItemsAsync().AsTask().Result;
+
+                bool isValidDrop = false;
+
+                foreach (var item in items)
+                {
+                    if (item is StorageFile file)
+                    {
+                        string fileExtension = Path.GetExtension(file.Name).ToLowerInvariant();
+                        if (supportedFileExtensions.Contains(fileExtension))
+                        {
+                            isValidDrop = true;
+                            break;
+                        }
+                    }
+                }
+
+                // Only allow the drop if we have valid files
+                if (isValidDrop)
+                {
+                    e.Handled = true;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine(ex);
+        }
+        finally
+        {
+            deferral.Complete();
+        }
+    }
+    private async void SelectFilesButton_Drop(object sender, DragEventArgs e)
+    {
+        if (sender is Button button)
+        {
+            try
+            {
+                // Disable the button to avoid double-clicking
+                button.IsEnabled = false;
+
+                selectedFiles = null;
+
+                var items = await e.DataView.GetStorageItemsAsync();
+
+                if (items.Count > 0)
+                {
+                    var filePaths = new List<string>();
+
+                    foreach (var item in items)
+                    {
+                        if (item is StorageFile file)
+                        {
+                            string fileExtension = Path.GetExtension(file.Name).ToLowerInvariant();
+
+                            // Only process files with supported extensions
+                            if (supportedFileExtensions.Contains(fileExtension))
+                            {
+                                filePaths.Add(file.Path);
+                            }
+                        }
+                    }
+
+                    if (filePaths.Count > 0)
+                    {
+                        selectedFiles = filePaths.ToArray();
+                        string fileOrFiles = filePaths.Count > 1 ? "files" : "file"; 
+                        Log($"Selected {filePaths.Count} valid {fileOrFiles}");
+                    }
+                    else
+                    {
+                        // Optionally show a message that no valid files were dropped
+                        Log("No valid files were dropped.", LogLevel.Warning);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine(ex);
+            }
+            finally
+            {
+                button.IsEnabled = true;
+            }
+        }
+    }
+
+
     private void ClearSelectionButton_Click(object sender, RoutedEventArgs e)
     {
-
+        selectedFiles = null;
+        selectedFolder = null;
+        Log("Folder and file selections cleared.", LogLevel.Informational);
     }
 
 

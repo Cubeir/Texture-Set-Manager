@@ -252,7 +252,7 @@
                 </Grid.RowDefinitions>
 
                 <!-- Select Folders / Select Files & Clear Split Button -->
-                <Border x:Name="SelectFoldersButtonsShadowHost"
+                <Border x:Name="SelectFolderButtonsShadowHost"
                         Grid.Row="0"
                         Margin="0, 0 ,0 ,12"
                         VerticalAlignment="Top"
@@ -260,7 +260,7 @@
                         Translation="0,0,24"
                         CornerRadius="4">
                     <Border.Shadow>
-                        <ThemeShadow x:Name="SelectFoldersButtonsShadow" />
+                        <ThemeShadow x:Name="SelectFolderButtonsShadow" />
                     </Border.Shadow>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -271,22 +271,25 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <Button x:Name="SelectFoldersButton"
+                        <Button x:Name="SelectFolderButton"
                                 Grid.Column="0"
-                                Click="SelectFoldersButton_Click"
+                                Click="SelectFolderButton_Click"
                                 HorizontalAlignment="Stretch"
                                 VerticalAlignment="Stretch"
                                 CornerRadius="4,0,0,4"
                                 BorderThickness="0"
                                 IsTextScaleFactorEnabled="False"
-                                ToolTipService.ToolTip="Select folders containing texture sets">
+                                ToolTipService.ToolTip="Select folder containing textures"
+                                AllowDrop="True"
+                                DragOver="SelectFolderButton_DragOver"
+                                Drop="SelectFolderButton_Drop">
                             <StackPanel Orientation="Horizontal"
                                         HorizontalAlignment="Center">
                                 <FontIcon Glyph="&#xE8B7;"
                                           FontSize="16"
                                           Margin="0,0,8,0"
                                           VerticalAlignment="Center" />
-                                <TextBlock Text="Select folders"
+                                <TextBlock Text="Select folder"
                                            FontWeight="SemiBold"
                                            VerticalAlignment="Center" />
                             </StackPanel>
@@ -301,7 +304,10 @@
                                 CornerRadius="0,0,0,0"
                                 BorderThickness="0"
                                 IsTextScaleFactorEnabled="False"
-                                ToolTipService.ToolTip="Select individual texture files">
+                                ToolTipService.ToolTip="Select individual texture files"
+                                AllowDrop="True"
+                                DragOver="SelectFilesButton_DragOver"
+                                Drop="SelectFilesButton_Drop">
                             <StackPanel Orientation="Horizontal"
                                         HorizontalAlignment="Center">
                                 <FontIcon Glyph="&#xF56E;"
@@ -473,7 +479,7 @@
 
                 <!-- Toggle Switches -->
                 <Grid Grid.Row="2"
-                      Margin="0,16,0,0"
+                      Margin="0,18,0,0"
                       HorizontalAlignment="Center">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="1.25*" />
@@ -495,6 +501,7 @@
                                   Margin="4"
                                   Grid.Column="1"
                                   Header="Smart filters"
+                                  ToolTipService.ToolTip="Enables prevention measures against re-processing existing textures that belong to a texture set, useful for mending existing packs."
                                   IsOn="True"
                                   OffContent=""
                                   OnContent=""
@@ -556,20 +563,20 @@
                 <!-- Overlay borders for the visual split -->
                 <Grid HorizontalAlignment="Stretch"
                       VerticalAlignment="Top"
-                      Margin="16,313,16,0"
+                      Margin="16,315,16,0"
                       IsHitTestVisible="False">
                     <Rectangle Fill="{ThemeResource ButtonBackgroundThemeBrush}" />
                     <Border BorderBrush="{ThemeResource FakeSplitButtonDarkBorderColor}"
-                            BorderThickness="0,4,0,0" />
+                            BorderThickness="0,3,0,0" />
                 </Grid>
 
                 <Grid HorizontalAlignment="Stretch"
                       VerticalAlignment="Top"
-                      Margin="16,317,16,0"
+                      Margin="16,318,16,0"
                       IsHitTestVisible="False">
                     <Rectangle Fill="{ThemeResource ButtonBackgroundThemeBrush}" />
                     <Border BorderBrush="{ThemeResource FakeSplitButtonBrightBorderColor}"
-                            BorderThickness="0,4,0,0" />
+                            BorderThickness="0,3,0,0" />
                 </Grid>
 
 
@@ -580,7 +587,7 @@
                         Click="GenerateButton_Click"
                         HorizontalAlignment="Stretch"
                         VerticalAlignment="Top"
-                        Margin="16,273,16,0"
+                        Margin="16,275,16,0"
                         CornerRadius="5, 5, 0 ,0"
                         BorderThickness="0"
                         Height="40">
