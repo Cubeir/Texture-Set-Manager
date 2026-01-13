@@ -4,14 +4,9 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
-using System.Threading;
 using System.Threading.Tasks;
 using ImageMagick;
-using Windows.Storage.Pickers;
-using WinRT.Interop;
 
-using static Texture_Set_Manager.MainWindow;
 
 namespace Texture_Set_Manager.Modules;
 
@@ -167,6 +162,52 @@ public static class Helpers
         {
             // Log($"Error writing direct TGA to {outputPath}: {ex.Message}");
             throw;
+        }
+    }
+
+    public static void ConvertImagesToTga(string[] filePaths)
+    {
+        foreach (string originalPath in filePaths)
+        {
+            try
+            {
+                // Safety
+                string extension = Path.GetExtension(originalPath);
+                if (!EnvironmentVariables.supportedFileExtensions.Contains(extension))
+                {
+                    Trace.WriteLine($"Skipping file {originalPath}: Unsupported extension");
+                    continue;
+                }
+                if (!File.Exists(originalPath))
+                {
+                    Trace.WriteLine($"Skipping file {originalPath}: File does not exist");
+                    continue;
+                }
+
+                // Read the original image
+                Bitmap bmp = ReadImage(originalPath, maxOpacity: false);
+
+                // Get original timestamp
+                DateTime origTime = File.GetLastWriteTime(originalPath);
+
+                // Create new path with .tga extension
+                string newPath = Path.ChangeExtension(originalPath, ".tga");
+
+                // Write as TGA
+                WriteImageAsTGA(bmp, newPath);
+
+                // Restore original timestamp
+                File.SetLastWriteTime(newPath, origTime);
+
+                bmp.Dispose();
+
+                Trace.WriteLine($"Successfully converted: {originalPath} -> {newPath}");
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine($"Failed to convert file {originalPath}: {ex.Message}");
+                continue;
+            }
         }
     }
 }

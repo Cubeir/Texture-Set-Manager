@@ -24,20 +24,15 @@ using Windows.Graphics;
 using Windows.UI;
 using static Texture_Set_Manager.EnvironmentVariables;
 using static Texture_Set_Manager.EnvironmentVariables.Persistent;
-using System.Linq.Expressions;
+using static Texture_Set_Manager.Core.WindowControlsManager;
 
 namespace Texture_Set_Manager;
 
 /*
- * All remainin implementaion detes
- * 
- * hook everything up right
-
  * Actually selections should get cleared automatically upon generation completion
  * its just that, make sure the design is able and safe to MEND existing packs!
  * 
  * 
- * all toggles becomes persistent // update updateui, review it all, see if all that must be persistent, is persistent indeed
  * 
  * the actual texture set maker, use the current code in ToolKit as a start
  * 
@@ -629,7 +624,7 @@ public sealed partial class MainWindow : Window
                 var folder = await picker.PickSingleFolderAsync();
                 selectedFolder = folder.Path;
 
-                Log("Selected: " + selectedFolder, LogLevel.Success);
+                Log("Selected folder path: " + selectedFolder, LogLevel.Success);
             }
             catch(Exception ex)
             {
@@ -749,7 +744,7 @@ public sealed partial class MainWindow : Window
                     }
                     selectedFiles = filePaths.ToArray();
                     string fileOrFiles = filePaths.Count > 1 ? "files" : "file";
-                    Log($"Selected {files.Count} {fileOrFiles}");
+                    Log($"Selected {files.Count} {fileOrFiles}.");
                 }
             }
             catch (Exception ex)
@@ -840,7 +835,7 @@ public sealed partial class MainWindow : Window
                     {
                         selectedFiles = filePaths.ToArray();
                         string fileOrFiles = filePaths.Count > 1 ? "files" : "file"; 
-                        Log($"Selected {filePaths.Count} valid {fileOrFiles}");
+                        Log($"Selected {filePaths.Count} valid {fileOrFiles}.");
                     }
                     else
                     {
@@ -922,10 +917,26 @@ public sealed partial class MainWindow : Window
     }
 
 
-    private void GenerateButton_Click(object sender, RoutedEventArgs e)
+    private async void GenerateButton_Click(object sender, RoutedEventArgs e)
     {
-
+        try
+        {
+            ToggleControls(this, false);
+            var result = await Generate.GenerateTextureSetsAsync();
+            Log(result);
+        }
+        catch (Exception ex)
+        {
+            Log("Error during generation: " + ex.Message);
+        }
+        finally
+        {
+            selectedFiles = null;
+            selectedFolder = null;
+            ToggleControls(this, true);
+        }
     }
+
 
 
     private void LogCopyButton_Click(object sender, RoutedEventArgs e)
