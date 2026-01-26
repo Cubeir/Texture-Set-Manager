@@ -10,6 +10,8 @@ using Windows.Storage.Pickers;
 using WinRT.Interop;
 
 namespace Texture_Set_Manager.Modules;
+
+
 public static class Generate
 {
     public static async Task<string> GenerateTextureSetsAsync()
@@ -114,10 +116,9 @@ public static class Generate
             filesList = filteredFiles;
 
             // Remove files referenced by texture set JSONs (SMART FILTER PART 2)
-            // TOOD: maybe validate too, if muutually exclusive params are used within the same texture set, log it, or do it a favor at least
             try
             {
-                var textureSetFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var textureSetFileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
                 var searchOption = EnvironmentVariables.Persistent.ProcessSubfolders ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
                 var jsonFiles = Directory.GetFiles(EnvironmentVariables.selectedFolder, "*.texture_set.json", searchOption);
@@ -150,7 +151,7 @@ public static class Generate
                         if (!string.IsNullOrEmpty(heightmapName))
                             textureNames.Add(heightmapName);
 
-                        // For each texture name, find the actual file path
+                        // For each texture name, find the actual file path and add base name to deduction list
                         foreach (var textureName in textureNames)
                         {
                             var folder = Path.GetDirectoryName(jsonFile);
@@ -160,7 +161,9 @@ public static class Generate
 
                                 if (File.Exists(targetPath))
                                 {
-                                    textureSetFiles.Add(targetPath);
+                                    // Add the base file name without extension to deduce files with different extensions
+                                    var baseFileName = Path.GetFileNameWithoutExtension(targetPath);
+                                    textureSetFileNames.Add(baseFileName);
                                     break; // Found a match with priority extension
                                 }
                             }
@@ -172,8 +175,12 @@ public static class Generate
                     }
                 }
 
-                // Remove files that are referenced by texture sets
-                filesList = filesList.Where(file => !textureSetFiles.Contains(file)).ToList();
+                // Remove files that have the same base name as files referenced by texture sets
+                filesList = filesList.Where(file =>
+                {
+                    var baseFileName = Path.GetFileNameWithoutExtension(file);
+                    return !textureSetFileNames.Contains(baseFileName);
+                }).ToList();
             }
             catch (Exception ex)
             {
@@ -404,6 +411,7 @@ public static class Generate
         }
     }
 }
+
 
 /// Blueprint:
 /// Create backup of files and parent folder?

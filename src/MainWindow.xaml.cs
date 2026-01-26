@@ -29,11 +29,13 @@ using static Texture_Set_Manager.Core.WindowControlsManager;
 namespace Texture_Set_Manager;
 
 /*
+ * Easter egg idea: if the logo is spinning above a certain threshold and it is clicked, make the gear shoot DOWNWARD (a top margin animation) as tall as window height
+ * minus twenty pixels or so, then immedietly make it stick to bottom instead, the idea is to create an illusion that the cog got shot downward into the window
+ * A convincing effect is possible.
+ * 
  * Actually selections should get cleared automatically upon generation completion
  * its just that, make sure the design is able and safe to MEND existing packs!
- * 
- * 
- * 
+
  * the actual texture set maker, use the current code in ToolKit as a start
  * 
  * It generates with latest format version, the texture set, and the desginated PBR maps in the same directory as the color texture!!!
@@ -44,7 +46,7 @@ namespace Texture_Set_Manager;
  * If convert to TGA is on, runs Targify on them before any further moves -- otherwise the texture sets are made with copies of the original format
  * perfect semantic design
  * 
- * if search dubdirs is on, it searches all subdirs of the given dir
+ * if search subdirs is on, it searches all subdirs of the given dir
  * 
  * if smart filters are on:
  * If the color texture already ends with _mer, _mers, _heightmap or _normal (but not _normal_normal, have that smart thing copied from vrtx app's processors)
@@ -363,7 +365,7 @@ public sealed partial class MainWindow : Window
     private DispatcherTimer rotationTimer;
     private DispatcherTimer speedIncrementTimer;
     private double currentSpeedDegreesPerSecond = 0.0;
-    private const int AccelerationIntervalMs = 500; // How frequently acceleration happens
+    private const int AccelerationIntervalMs = 1000; // How frequently acceleration happens
     private const double SpeedIncrementDegreesPerMinute = 1.0; // How much acceleration (in extra degrees to spin per min)
     private const int AnimationFrameIntervalMs = 7; // (1000/X ≈ FPS)
     private void StartLogoSpinner()
@@ -374,9 +376,9 @@ public sealed partial class MainWindow : Window
         // Create a RotateTransform on the image with center rotation
         var rotateTransform = new RotateTransform();
 
-        // Set the center point to the center of the image (10,10 for 20x20 image)
-        rotateTransform.CenterX = 10;  // Half of image width
-        rotateTransform.CenterY = 10;  // Half of image height
+        // Set the center point to the center of the image
+        rotateTransform.CenterX = 10.0;  // Half of image width
+        rotateTransform.CenterY = 10.0;  // Half of image height
 
         iconImageBox.RenderTransform = rotateTransform;
 
