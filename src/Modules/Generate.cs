@@ -275,14 +275,29 @@ public static class Generate
                 var filesArray = filesList.ToArray();
                 Helpers.ConvertImagesToTga(filesArray);
 
-                // Update filesList with new .tga paths
+                // Update filesList with new .tga paths and delete old files
                 var newFilesList = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var file in filesArray)
                 {
                     string tgaPath = Path.ChangeExtension(file, ".tga");
+
                     if (File.Exists(tgaPath))
                     {
                         newFilesList.Add(tgaPath);
+
+                        // Delete original file if it's not already a TGA
+                        if (!file.EndsWith(".tga", StringComparison.OrdinalIgnoreCase) && File.Exists(file))
+                        {
+                            try
+                            {
+                                File.Delete(file);
+                                Trace.WriteLine($"Deleted original: {file}");
+                            }
+                            catch (Exception ex)
+                            {
+                                Trace.WriteLine($"Warning: Could not delete {file}: {ex.Message}");
+                            }
+                        }
                     }
                     else if (File.Exists(file))
                     {
@@ -457,7 +472,7 @@ public static class Generate
 
             picker.FileTypeChoices.Add("ZIP Archive", new List<string> { ".zip" });
             picker.SuggestedStartLocation = PickerLocationId.Desktop;
-            picker.SuggestedFileName = $"TSMFiles_backup_{DateTime.Now.ToString("yyyyMMdd_HHmmss")}";
+            picker.SuggestedFileName = $"TSMFiles_backup_{GetTimestamp()}";
 
             var file = await picker.PickSaveFileAsync();
             if (file == null)
@@ -546,7 +561,7 @@ public static class Generate
             picker.SuggestedStartLocation = PickerLocationId.Desktop;
 
             string folderName = new DirectoryInfo(folderPath).Name;
-            picker.SuggestedFileName = $"{folderName}_backup_{DateTime.Now.ToString("yyyyMMdd_HHmmss")}";
+            picker.SuggestedFileName = $"{folderName}_backup_{GetTimestamp()}";
 
             var file = await picker.PickSaveFileAsync();
             if (file == null)
@@ -670,6 +685,14 @@ public static class Generate
         }
 
         return string.Join(Path.DirectorySeparatorChar.ToString(), commonParts);
+    }
+
+    /// <summary>
+    /// Generates a timestamp string for backup file naming.
+    /// </summary>
+    private static string GetTimestamp()
+    {
+        return DateTime.Now.ToString("yyyyMMdd_HHmmss");
     }
 
     #endregion
