@@ -924,12 +924,13 @@ public sealed partial class MainWindow : Window
         try
         {
             ToggleControls(this, false);
-            var result = await Generate.GenerateTextureSetsAsync();
-            Log(result);
+            var (success, message) = await Generate.GenerateTextureSetsAsync();
+
+            Log(message, success ? LogLevel.Success : LogLevel.Error);
         }
         catch (Exception ex)
         {
-            Log("Error during generation: " + ex.Message);
+            Log("Error during generation: " + ex.Message, LogLevel.Error);
         }
         finally
         {

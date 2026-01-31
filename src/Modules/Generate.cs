@@ -4,439 +4,673 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
-using Newtonsoft.Json.Linq;
+using Windows.Storage;
 using Windows.Storage.Pickers;
-using WinRT.Interop;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using static Texture_Set_Manager.EnvironmentVariables;
 
 namespace Texture_Set_Manager.Modules;
 
-
 public static class Generate
 {
-    public static async Task<string> GenerateTextureSetsAsync()
+    /// <summary>
+    /// Main texture set template generator. Creates PBR texture set templates based on color textures.
+    /// </summary>
+    /// <returns>Tuple of (success, message) where success indicates operation outcome</returns>
+    public static async Task<(bool success, string message)> GenerateTextureSetsAsync()
     {
-        Trace.WriteLine("Starting texture set generation process...");
-
-        // Phase 1: Check if files or folders are selected
-        if ((EnvironmentVariables.selectedFiles == null || EnvironmentVariables.selectedFiles.Length == 0) &&
-            string.IsNullOrEmpty(EnvironmentVariables.selectedFolder))
+        try
         {
-            return "No files or folders were selected for texture set generation.";
-        }
+            // ============================================
+            // PHASE 1: Validate Input
+            // ============================================
+            Trace.WriteLine("=== PHASE 1: Input Validation ===");
 
-        // Phase 2: Backup files if enabled
-        if (EnvironmentVariables.Persistent.CreateBackup)
-        {
-            Trace.WriteLine("Creating backups...");
+            bool hasFiles = selectedFiles != null && selectedFiles.Length > 0;
+            bool hasFolder = !string.IsNullOrWhiteSpace(selectedFolder);
 
-            try
+            if (!hasFiles && !hasFolder)
             {
-                if (EnvironmentVariables.selectedFiles != null && EnvironmentVariables.selectedFiles.Length > 0)
-                {
-                    await CreateBackupAsync(EnvironmentVariables.selectedFiles, "TSMFiles");
-                }
-
-                if (!string.IsNullOrEmpty(EnvironmentVariables.selectedFolder))
-                {
-                    await CreateBackupAsync(EnvironmentVariables.selectedFolder, Path.GetFileName(EnvironmentVariables.selectedFolder));
-                }
+                Trace.WriteLine("No files or folders selected.");
+                return (false, "No files or folders were selected for texture set generation.");
             }
-            catch (Exception ex)
+
+            Trace.WriteLine($"Has files: {hasFiles} ({selectedFiles?.Length ?? 0} files)");
+            Trace.WriteLine($"Has folder: {hasFolder} ({selectedFolder ?? "null"})");
+
+            // ============================================
+            // PHASE 2: Backup (if enabled)
+            // ============================================
+            if (Persistent.CreateBackup)
             {
-                Trace.WriteLine($"Failed to create backups: {ex.Message}");
-                return $"Error creating backups: {ex.Message}";
-            }
-        }
+                Trace.WriteLine("=== PHASE 2: Creating Backups ===");
 
-        // Phase 3: Build files list
-        var filesList = new List<string>();
-
-        if (EnvironmentVariables.selectedFiles != null && EnvironmentVariables.selectedFiles.Length > 0)
-        {
-            filesList.AddRange(EnvironmentVariables.selectedFiles);
-        }
-
-        if (!string.IsNullOrEmpty(EnvironmentVariables.selectedFolder))
-        {
-            var searchOption = EnvironmentVariables.Persistent.ProcessSubfolders ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-            var folderFiles = Directory.GetFiles(EnvironmentVariables.selectedFolder, "*", searchOption)
-                .Where(file => EnvironmentVariables.supportedFileExtensions.Contains(Path.GetExtension(file).ToLowerInvariant()));
-
-            filesList.AddRange(folderFiles);
-        }
-
-        // Phase 4: Smart filtering
-        if (EnvironmentVariables.Persistent.SmartFilters)
-        {
-            Trace.WriteLine("Applying smart filters...");
-
-            // Remove non-existent files
-            filesList = filesList.Where(File.Exists).ToList();
-
-            // Filter out special suffixes (SMART FILTER PART 1)
-            var filteredFiles = new List<string>();
-            foreach (var file in filesList)
-            {
-                var fileNameWithoutExt = Path.GetFileNameWithoutExtension(file);
-                var hasSpecialSuffix = false;
-
-                if (fileNameWithoutExt.EndsWith("_mer", StringComparison.OrdinalIgnoreCase) ||
-                    fileNameWithoutExt.EndsWith("_mers", StringComparison.OrdinalIgnoreCase) ||
-                    fileNameWithoutExt.EndsWith("_heightmap", StringComparison.OrdinalIgnoreCase) ||
-                    fileNameWithoutExt.EndsWith("_normal", StringComparison.OrdinalIgnoreCase))
+                // Backup selected files
+                if (hasFiles)
                 {
-                    // Special handling for _normal suffix
-                    if (fileNameWithoutExt.EndsWith("_normal", StringComparison.OrdinalIgnoreCase))
+                    bool fileBackupSuccess = await BackupFilesAsync(selectedFiles);
+                    if (!fileBackupSuccess)
                     {
-                        var baseName = fileNameWithoutExt.Substring(0, fileNameWithoutExt.Length - 6); // Remove "_normal"
-                        var normalNormalFileName = $"{baseName}_normal_normal";
+                        Trace.WriteLine("File backup was cancelled or failed.");
+                    }
+                }
 
-                        // Check if the _normal_normal file exists in same directory
-                        var normalNormalPath = Path.Combine(Path.GetDirectoryName(file), normalNormalFileName + Path.GetExtension(file));
-                        if (File.Exists(normalNormalPath))
+                // Backup selected folder
+                if (hasFolder && Directory.Exists(selectedFolder))
+                {
+                    bool folderBackupSuccess = await BackupFolderAsync(selectedFolder);
+                    if (!folderBackupSuccess)
+                    {
+                        Trace.WriteLine("Folder backup was cancelled or failed.");
+                    }
+                }
+            }
+            else
+            {
+                Trace.WriteLine("=== PHASE 2: Backups Skipped (disabled) ===");
+            }
+
+            // ============================================
+            // PHASE 3: Build Files List
+            // ============================================
+            Trace.WriteLine("=== PHASE 3: Building Files List ===");
+
+            var filesList = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // Add selected files
+            if (hasFiles)
+            {
+                foreach (var file in selectedFiles)
+                {
+                    if (File.Exists(file) && IsSupportedExtension(file))
+                    {
+                        filesList.Add(file);
+                        Trace.WriteLine($"Added from selection: {file}");
+                    }
+                }
+            }
+
+            // Add files from selected folder
+            if (hasFolder && Directory.Exists(selectedFolder))
+            {
+                SearchOption searchOption = Persistent.ProcessSubfolders
+                    ? SearchOption.AllDirectories
+                    : SearchOption.TopDirectoryOnly;
+
+                var folderFiles = Directory.GetFiles(selectedFolder, "*.*", searchOption)
+                    .Where(f => IsSupportedExtension(f));
+
+                foreach (var file in folderFiles)
+                {
+                    filesList.Add(file);
+                    Trace.WriteLine($"Added from folder: {file}");
+                }
+            }
+
+            Trace.WriteLine($"Total files collected: {filesList.Count}");
+
+            if (filesList.Count == 0)
+            {
+                return (false, "No valid image files found in the selected locations.");
+            }
+
+            // ============================================
+            // PHASE 4: Smart Filters (if enabled)
+            // ============================================
+            if (Persistent.SmartFilters)
+            {
+                Trace.WriteLine("=== PHASE 4: Applying Smart Filters ===");
+
+                // Part 1: Filter by suffix
+                var toRemove = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var file in filesList)
+                {
+                    string nameWithoutExt = Path.GetFileNameWithoutExtension(file);
+                    string directory = Path.GetDirectoryName(file);
+
+                    // Check for _mer, _mers, _heightmap suffixes
+                    if (nameWithoutExt.EndsWith("_mer", StringComparison.OrdinalIgnoreCase) ||
+                        nameWithoutExt.EndsWith("_mers", StringComparison.OrdinalIgnoreCase) ||
+                        nameWithoutExt.EndsWith("_heightmap", StringComparison.OrdinalIgnoreCase))
+                    {
+                        toRemove.Add(file);
+                        Trace.WriteLine($"Smart filter: Removing {Path.GetFileName(file)} (PBR suffix detected)");
+                        continue;
+                    }
+
+                    // Special handling for _normal suffix
+                    if (nameWithoutExt.EndsWith("_normal", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Check if a _normal_normal variant exists
+                        string normalNormalBaseName = nameWithoutExt + "_normal";
+                        bool foundNormalNormal = false;
+
+                        foreach (var ext in supportedFileExtensions)
                         {
-                            // Found a _normal_normal, skip this _normal file
-                            continue;
+                            string normalNormalPath = Path.Combine(directory, normalNormalBaseName + ext);
+                            if (File.Exists(normalNormalPath))
+                            {
+                                foundNormalNormal = true;
+                                // Remove the _normal_normal file instead
+                                toRemove.Add(normalNormalPath);
+                                Trace.WriteLine($"Smart filter: Found {Path.GetFileName(normalNormalPath)}, keeping {Path.GetFileName(file)} as color texture");
+                                break;
+                            }
+                        }
+
+                        // If no _normal_normal exists, this is a true normal map
+                        if (!foundNormalNormal)
+                        {
+                            toRemove.Add(file);
+                            Trace.WriteLine($"Smart filter: Removing {Path.GetFileName(file)} (true normal map)");
                         }
                     }
-                    else
-                    {
-                        // Regular suffixes - skip the file
-                        hasSpecialSuffix = true;
-                    }
                 }
 
-                if (!hasSpecialSuffix)
+                // Apply suffix-based removals
+                foreach (var file in toRemove)
                 {
-                    filteredFiles.Add(file);
+                    filesList.Remove(file);
                 }
-            }
 
-            filesList = filteredFiles;
+                Trace.WriteLine($"Files after suffix filtering: {filesList.Count}");
 
-            // Remove files referenced by texture set JSONs (SMART FILTER PART 2)
-            try
-            {
-                var textureSetFileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-                var searchOption = EnvironmentVariables.Persistent.ProcessSubfolders ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-                var jsonFiles = Directory.GetFiles(EnvironmentVariables.selectedFolder, "*.texture_set.json", searchOption);
-
-                foreach (var jsonFile in jsonFiles)
+                // Part 2: Parse existing texture set JSONs and exclude referenced textures
+                if (hasFolder && Directory.Exists(selectedFolder))
                 {
-                    try
+                    SearchOption searchOption = Persistent.ProcessSubfolders
+                        ? SearchOption.AllDirectories
+                        : SearchOption.TopDirectoryOnly;
+
+                    var textureSetJsons = Directory.GetFiles(selectedFolder, "*.texture_set.json", searchOption);
+                    Trace.WriteLine($"Found {textureSetJsons.Length} existing texture set JSONs");
+
+                    var referencedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var jsonFile in textureSetJsons)
                     {
-                        var text = File.ReadAllText(jsonFile);
-                        var root = JObject.Parse(text);
-                        if (root.SelectToken("minecraft:texture_set") is not JObject set)
-                            continue;
-
-                        // Get all texture names from JSON
-                        var textureNames = new List<string>();
-
-                        var colorName = set.Value<string>("color");
-                        if (!string.IsNullOrEmpty(colorName))
-                            textureNames.Add(colorName);
-
-                        var merName = set.Value<string>("metalness_emissive_roughness") ?? set.Value<string>("metalness_emissive_roughness_subsurface");
-                        if (!string.IsNullOrEmpty(merName))
-                            textureNames.Add(merName);
-
-                        var normalName = set.Value<string>("normal");
-                        if (!string.IsNullOrEmpty(normalName))
-                            textureNames.Add(normalName);
-
-                        var heightmapName = set.Value<string>("heightmap");
-                        if (!string.IsNullOrEmpty(heightmapName))
-                            textureNames.Add(heightmapName);
-
-                        // For each texture name, find the actual file path and add base name to deduction list
-                        foreach (var textureName in textureNames)
+                        try
                         {
-                            var folder = Path.GetDirectoryName(jsonFile);
-                            foreach (var ext in EnvironmentVariables.supportedFileExtensions)
-                            {
-                                var targetPath = Path.Combine(folder, textureName + ext);
+                            string jsonText = File.ReadAllText(jsonFile);
+                            var root = JObject.Parse(jsonText);
 
-                                if (File.Exists(targetPath))
+                            if (root.SelectToken("minecraft:texture_set") is JObject textureSet)
+                            {
+                                string jsonDir = Path.GetDirectoryName(jsonFile);
+
+                                // Extract all texture references
+                                var textureNames = new List<string>();
+
+                                if (textureSet.Value<string>("color") is string color)
+                                    textureNames.Add(color);
+
+                                if (textureSet.Value<string>("metalness_emissive_roughness") is string mer)
+                                    textureNames.Add(mer);
+
+                                if (textureSet.Value<string>("metalness_emissive_roughness_subsurface") is string mers)
+                                    textureNames.Add(mers);
+
+                                if (textureSet.Value<string>("normal") is string normal)
+                                    textureNames.Add(normal);
+
+                                if (textureSet.Value<string>("heightmap") is string heightmap)
+                                    textureNames.Add(heightmap);
+
+                                // For each texture name, check all possible extensions
+                                foreach (var textureName in textureNames)
                                 {
-                                    // Add the base file name without extension to deduce files with different extensions
-                                    var baseFileName = Path.GetFileNameWithoutExtension(targetPath);
-                                    textureSetFileNames.Add(baseFileName);
-                                    break; // Found a match with priority extension
+                                    foreach (var ext in supportedFileExtensions)
+                                    {
+                                        string texturePath = Path.Combine(jsonDir, textureName + ext);
+
+                                        // Case-insensitive file existence check
+                                        if (FileExistsCaseInsensitive(texturePath))
+                                        {
+                                            referencedFiles.Add(texturePath);
+                                            Trace.WriteLine($"Texture set references: {texturePath}");
+                                        }
+                                    }
                                 }
                             }
                         }
+                        catch (Exception ex)
+                        {
+                            Trace.WriteLine($"Failed to parse {jsonFile}: {ex.Message}");
+                        }
                     }
-                    catch (Exception ex)
+
+                    // Remove all referenced files from the list
+                    foreach (var referencedFile in referencedFiles)
                     {
-                        Trace.WriteLine($"Failed to parse JSON file {jsonFile}: {ex.Message}");
+                        if (filesList.Remove(referencedFile))
+                        {
+                            Trace.WriteLine($"Smart filter: Removed {referencedFile} (already in texture set)");
+                        }
                     }
                 }
 
-                // Remove files that have the same base name as files referenced by texture sets
-                filesList = filesList.Where(file =>
-                {
-                    var baseFileName = Path.GetFileNameWithoutExtension(file);
-                    return !textureSetFileNames.Contains(baseFileName);
-                }).ToList();
+                Trace.WriteLine($"Files after smart filtering: {filesList.Count}");
             }
-            catch (Exception ex)
+            else
             {
-                Trace.WriteLine($"Error during texture set filtering: {ex.Message}");
+                Trace.WriteLine("=== PHASE 4: Smart Filters Skipped (disabled) ===");
             }
-        }
 
-        // Phase 5: Generate texture sets
-        var successCount = 0;
-        var errorCount = 0;
-
-        foreach (var file in filesList)
-        {
-            try
+            if (filesList.Count == 0)
             {
-                var fileNameWithoutExt = Path.GetFileNameWithoutExtension(file);
-                var folder = Path.GetDirectoryName(file);
-                var jsonPath = Path.Combine(folder, $"{fileNameWithoutExt}.texture_set.json");
+                return (false, "No files remain after filtering. All files may already have texture sets.");
+            }
 
-                // Create JSON content
-                var jsonObject = new JObject();
-                jsonObject["format_version"] = "1.21.30";
+            // ============================================
+            // PHASE 4.5: Convert to TGA (if enabled, before template generation)
+            // ============================================
+            if (Persistent.ConvertToTarga)
+            {
+                Trace.WriteLine("=== PHASE 4.5: Converting to TGA ===");
 
-                var textureSetObject = new JObject();
-                textureSetObject["color"] = fileNameWithoutExt;
+                var filesArray = filesList.ToArray();
+                Helpers.ConvertImagesToTga(filesArray);
 
-                // Add metalness_emissive_roughness or metalness_emissive_roughness_subsurface
-                var merName = $"{fileNameWithoutExt}_mer";
-                if (EnvironmentVariables.Persistent.enableSSS)
+                // Update filesList with new .tga paths
+                var newFilesList = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var file in filesArray)
                 {
-                    textureSetObject["metalness_emissive_roughness_subsurface"] = $"{fileNameWithoutExt}_mers";
-                }
-                else
-                {
-                    textureSetObject["metalness_emissive_roughness"] = merName;
-                }
-
-                // Add heightmap or normal based on SecondaryPBRMapType
-                if (!string.IsNullOrEmpty(EnvironmentVariables.Persistent.SecondaryPBRMapType) &&
-                    !EnvironmentVariables.Persistent.SecondaryPBRMapType.Equals("none", StringComparison.OrdinalIgnoreCase))
-                {
-                    var secondaryName = EnvironmentVariables.Persistent.SecondaryPBRMapType.Equals("heightmap", StringComparison.OrdinalIgnoreCase) ?
-                        $"{fileNameWithoutExt}_heightmap" :
-                        $"{fileNameWithoutExt}_normal";
-
-                    if (EnvironmentVariables.Persistent.SecondaryPBRMapType.Equals("heightmap", StringComparison.OrdinalIgnoreCase))
+                    string tgaPath = Path.ChangeExtension(file, ".tga");
+                    if (File.Exists(tgaPath))
                     {
-                        textureSetObject["heightmap"] = secondaryName;
+                        newFilesList.Add(tgaPath);
+                    }
+                    else if (File.Exists(file))
+                    {
+                        // Conversion may have failed for this file, keep original
+                        newFilesList.Add(file);
+                    }
+                }
+                filesList = newFilesList;
+
+                Trace.WriteLine($"Files after TGA conversion: {filesList.Count}");
+            }
+            else
+            {
+                Trace.WriteLine("=== PHASE 4.5: TGA Conversion Skipped (disabled) ===");
+            }
+
+            // ============================================
+            // PHASE 5: Generate Texture Set Templates
+            // ============================================
+            Trace.WriteLine("=== PHASE 5: Generating Texture Set Templates ===");
+
+            int successCount = 0;
+            int failCount = 0;
+
+            foreach (var colorTexturePath in filesList)
+            {
+                try
+                {
+                    string directory = Path.GetDirectoryName(colorTexturePath);
+                    string fileNameWithoutExt = Path.GetFileNameWithoutExtension(colorTexturePath);
+                    string extension = Path.GetExtension(colorTexturePath);
+
+                    Trace.WriteLine($"Processing: {colorTexturePath}");
+
+                    // Build texture set JSON
+                    var textureSetObj = new JObject();
+                    textureSetObj["format_version"] = "1.21.30";
+
+                    var minecraftTextureSet = new JObject();
+                    minecraftTextureSet["color"] = fileNameWithoutExt;
+
+                    // Add MER or MERS
+                    if (Persistent.enableSSS)
+                    {
+                        minecraftTextureSet["metalness_emissive_roughness_subsurface"] = fileNameWithoutExt + "_mers";
                     }
                     else
                     {
-                        textureSetObject["normal"] = secondaryName;
+                        minecraftTextureSet["metalness_emissive_roughness"] = fileNameWithoutExt + "_mer";
                     }
-                }
 
-                jsonObject["minecraft:texture_set"] = textureSetObject;
-
-                // Write JSON file
-                File.WriteAllText(jsonPath, jsonObject.ToString());
-
-                // Copy files with proper suffixes
-                var extension = Path.GetExtension(file);
-
-                // Copy color file (same as original)
-                var colorTargetPath = Path.Combine(folder, $"{fileNameWithoutExt}{extension}");
-                if (!File.Exists(colorTargetPath) && File.Exists(file))
-                {
-                    File.Copy(file, colorTargetPath);
-                }
-
-                // Copy MER file
-                var merTargetPath = Path.Combine(folder, $"{merName}{extension}");
-                if (!File.Exists(merTargetPath))
-                {
-                    // Create empty file or use placeholder logic here if needed
-                    try
+                    // Add secondary PBR map (normal or heightmap)
+                    if (Persistent.SecondaryPBRMapType == "normalmap")
                     {
-                        File.Create(merTargetPath).Dispose();
+                        minecraftTextureSet["normal"] = fileNameWithoutExt + "_normal";
                     }
-                    catch (Exception ex)
+                    else if (Persistent.SecondaryPBRMapType == "heightmap")
                     {
-                        Trace.WriteLine($"Failed to create MER file {merTargetPath}: {ex.Message}");
+                        minecraftTextureSet["heightmap"] = fileNameWithoutExt + "_heightmap";
                     }
-                }
+                    // If "none", we don't add any secondary map
 
-                // Copy heightmap/normal file based on SecondaryPBRMapType
-                if (!string.IsNullOrEmpty(EnvironmentVariables.Persistent.SecondaryPBRMapType) &&
-                    !EnvironmentVariables.Persistent.SecondaryPBRMapType.Equals("none", StringComparison.OrdinalIgnoreCase))
+                    textureSetObj["minecraft:texture_set"] = minecraftTextureSet;
+
+                    // Write JSON file
+                    string jsonPath = Path.Combine(directory, fileNameWithoutExt + ".texture_set.json");
+                    string jsonContent = JsonConvert.SerializeObject(textureSetObj, Formatting.Indented);
+                    File.WriteAllText(jsonPath, jsonContent);
+                    Trace.WriteLine($"Created: {jsonPath}");
+
+                    // Copy color texture to create template files
+                    // MER or MERS
+                    string merSuffix = Persistent.enableSSS ? "_mers" : "_mer";
+                    string merPath = Path.Combine(directory, fileNameWithoutExt + merSuffix + extension);
+                    File.Copy(colorTexturePath, merPath, overwrite: true);
+                    Trace.WriteLine($"Created template: {merPath}");
+
+                    // Secondary PBR map
+                    if (Persistent.SecondaryPBRMapType == "normalmap")
+                    {
+                        string normalPath = Path.Combine(directory, fileNameWithoutExt + "_normal" + extension);
+                        File.Copy(colorTexturePath, normalPath, overwrite: true);
+                        Trace.WriteLine($"Created template: {normalPath}");
+                    }
+                    else if (Persistent.SecondaryPBRMapType == "heightmap")
+                    {
+                        string heightmapPath = Path.Combine(directory, fileNameWithoutExt + "_heightmap" + extension);
+                        File.Copy(colorTexturePath, heightmapPath, overwrite: true);
+                        Trace.WriteLine($"Created template: {heightmapPath}");
+                    }
+
+                    successCount++;
+                }
+                catch (Exception ex)
                 {
-                    var secondaryName = EnvironmentVariables.Persistent.SecondaryPBRMapType.Equals("heightmap", StringComparison.OrdinalIgnoreCase) ?
-                        $"{fileNameWithoutExt}_heightmap" :
-                        $"{fileNameWithoutExt}_normal";
-
-                    var secondaryTargetPath = Path.Combine(folder, $"{secondaryName}{extension}");
-                    if (!File.Exists(secondaryTargetPath))
-                    {
-                        // Create empty file or use placeholder logic here if needed
-                        try
-                        {
-                            File.Create(secondaryTargetPath).Dispose();
-                        }
-                        catch (Exception ex)
-                        {
-                            Trace.WriteLine($"Failed to create {EnvironmentVariables.Persistent.SecondaryPBRMapType} file {secondaryTargetPath}: {ex.Message}");
-                        }
-                    }
+                    Trace.WriteLine($"Failed to generate texture set for {colorTexturePath}: {ex.Message}");
+                    failCount++;
                 }
-
-                successCount++;
             }
-            catch (Exception ex)
+
+            Trace.WriteLine($"=== GENERATION COMPLETE ===");
+            Trace.WriteLine($"Success: {successCount}, Failed: {failCount}");
+
+            // Return status
+            if (failCount == 0)
             {
-                Trace.WriteLine($"Failed to process file {file}: {ex.Message}");
-                errorCount++;
+                return (true, $"Successfully generated {successCount} texture set template(s).");
+            }
+            else if (successCount == 0)
+            {
+                return (false, "Failed to generate texture sets.");
+            }
+            else
+            {
+                return (true, $"Generated {successCount} texture set(s) with {failCount} failure(s).");
             }
         }
-
-        // Phase 6: Convert to TGA if enabled
-        if (EnvironmentVariables.Persistent.ConvertToTarga && filesList.Count > 0)
+        catch (Exception ex)
         {
-            try
-            {
-                Helpers.ConvertImagesToTga(filesList.ToArray());
-            }
-            catch (Exception ex)
-            {
-                Trace.WriteLine($"Failed to convert images to TGA: {ex.Message}");
-                return $"Generation completed with errors. Successes: {successCount}, Errors: {errorCount}. Conversion to TGA failed.";
-            }
+            Trace.WriteLine($"FATAL ERROR: {ex}");
+            return (false, "An unexpected error occurred during generation.");
         }
-
-        Trace.WriteLine("Texture set generation completed.");
-
-        if (errorCount > 0)
-        {
-            return $"Generation completed with errors. Successes: {successCount}, Errors: {errorCount}";
-        }
-
-        return $"Successfully generated texture sets for {successCount} files.";
     }
 
-    private static async Task CreateBackupAsync(string[] filePaths, string prefix)
+    #region Helper Methods
+
+    /// <summary>
+    /// Checks if a file has a supported image extension.
+    /// </summary>
+    private static bool IsSupportedExtension(string filePath)
     {
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(MainWindow.Instance);
-        var picker = new FileSavePicker();
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-        picker.FileTypeChoices.Add("ZIP Archive", new List<string>() { ".zip" });
-        picker.SuggestedFileName = $"{prefix}_backup_{DateTime.Now:yyyyMMdd_HHmmss}";
-        picker.SuggestedStartLocation = PickerLocationId.Desktop;
+        string ext = Path.GetExtension(filePath).ToLowerInvariant();
+        return supportedFileExtensions.Contains(ext);
+    }
 
-        var file = await picker.PickSaveFileAsync();
-        if (file == null) return;
-
-        var zipPath = Path.Combine(Path.GetTempPath(), $"temp_backup_{Guid.NewGuid()}.zip");
+    /// <summary>
+    /// Case-insensitive file existence check.
+    /// </summary>
+    private static bool FileExistsCaseInsensitive(string filePath)
+    {
+        if (File.Exists(filePath))
+            return true;
 
         try
         {
-            using (var zip = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+            string directory = Path.GetDirectoryName(filePath);
+            string fileName = Path.GetFileName(filePath);
+
+            if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+                return false;
+
+            return Directory.GetFiles(directory, fileName, SearchOption.TopDirectoryOnly).Length > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Backs up selected files to a ZIP archive.
+    /// </summary>
+    private static async Task<bool> BackupFilesAsync(string[] files)
+    {
+        try
+        {
+            Trace.WriteLine($"Backing up {files.Length} file(s)...");
+
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(MainWindow.Instance);
+            var picker = new FileSavePicker();
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+            picker.FileTypeChoices.Add("ZIP Archive", new List<string> { ".zip" });
+            picker.SuggestedStartLocation = PickerLocationId.Desktop;
+            picker.SuggestedFileName = $"TSMFiles_backup_{DateTime.Now.ToString("yyyyMMdd_HHmmss")}";
+
+            var file = await picker.PickSaveFileAsync();
+            if (file == null)
             {
-                foreach (var filePath in filePaths)
+                Trace.WriteLine("File backup cancelled by user.");
+                return false;
+            }
+
+            var tempZipPath = Path.Combine(Path.GetTempPath(), $"temp_{Guid.NewGuid()}.zip");
+
+            try
+            {
+                using (var zip = ZipFile.Open(tempZipPath, ZipArchiveMode.Create))
                 {
-                    if (File.Exists(filePath))
+                    // Group files by their root directory to preserve structure intelligently
+                    var filesByRoot = GroupFilesByCommonRoot(files);
+
+                    foreach (var kvp in filesByRoot)
                     {
-                        var relativePath = Path.GetFileName(filePath);
+                        string commonRoot = kvp.Key;
+                        var filesInRoot = kvp.Value;
+
+                        foreach (var filePath in filesInRoot)
+                        {
+                            if (!File.Exists(filePath))
+                                continue;
+
+                            // Preserve directory structure relative to common root
+                            string relativePath = string.IsNullOrEmpty(commonRoot)
+                                ? Path.GetFileName(filePath)
+                                : Path.GetRelativePath(commonRoot, filePath);
+
+                            zip.CreateEntryFromFile(filePath, relativePath, CompressionLevel.Optimal);
+                            Trace.WriteLine($"Backed up: {relativePath}");
+                        }
+                    }
+                }
+
+                if (!File.Exists(tempZipPath))
+                {
+                    Trace.WriteLine("Temporary backup archive was deleted before writing.");
+                    return false;
+                }
+
+                using var destStream = await file.OpenStreamForWriteAsync();
+                using var srcStream = File.OpenRead(tempZipPath);
+                await srcStream.CopyToAsync(destStream);
+
+                Trace.WriteLine($"File backup completed: {file.Path}");
+                return true;
+            }
+            finally
+            {
+                try
+                {
+                    if (File.Exists(tempZipPath))
+                        File.Delete(tempZipPath);
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"Warning: Couldn't delete temp file: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"File backup failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Backs up an entire folder to a ZIP archive.
+    /// </summary>
+    private static async Task<bool> BackupFolderAsync(string folderPath)
+    {
+        try
+        {
+            Trace.WriteLine($"Backing up folder: {folderPath}");
+
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(MainWindow.Instance);
+            var picker = new FileSavePicker();
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+            picker.FileTypeChoices.Add("ZIP Archive", new List<string> { ".zip" });
+            picker.SuggestedStartLocation = PickerLocationId.Desktop;
+
+            string folderName = new DirectoryInfo(folderPath).Name;
+            picker.SuggestedFileName = $"{folderName}_backup_{DateTime.Now.ToString("yyyyMMdd_HHmmss")}";
+
+            var file = await picker.PickSaveFileAsync();
+            if (file == null)
+            {
+                Trace.WriteLine("Folder backup cancelled by user.");
+                return false;
+            }
+
+            var tempZipPath = Path.Combine(Path.GetTempPath(), $"temp_{Guid.NewGuid()}.zip");
+
+            try
+            {
+                using (var zip = ZipFile.Open(tempZipPath, ZipArchiveMode.Create))
+                {
+                    var allFiles = Directory.GetFiles(folderPath, "*", SearchOption.AllDirectories);
+
+                    foreach (var filePath in allFiles)
+                    {
+                        var relativePath = Path.GetRelativePath(folderPath, filePath);
                         zip.CreateEntryFromFile(filePath, relativePath, CompressionLevel.Optimal);
+                        Trace.WriteLine($"Backed up: {relativePath}");
                     }
                 }
-            }
 
-            using var destStream = await file.OpenStreamForWriteAsync();
-            using var srcStream = File.OpenRead(zipPath);
-            await srcStream.CopyToAsync(destStream);
+                if (!File.Exists(tempZipPath))
+                {
+                    Trace.WriteLine("Temporary backup archive was deleted before writing.");
+                    return false;
+                }
+
+                using var destStream = await file.OpenStreamForWriteAsync();
+                using var srcStream = File.OpenRead(tempZipPath);
+                await srcStream.CopyToAsync(destStream);
+
+                Trace.WriteLine($"Folder backup completed: {file.Path}");
+                return true;
+            }
+            finally
+            {
+                try
+                {
+                    if (File.Exists(tempZipPath))
+                        File.Delete(tempZipPath);
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"Warning: Couldn't delete temp file: {ex.Message}");
+                }
+            }
         }
-        finally
+        catch (Exception ex)
         {
-            try
-            {
-                if (File.Exists(zipPath))
-                    File.Delete(zipPath);
-            }
-            catch (Exception ex)
-            {
-                Trace.WriteLine($"Warning: Couldn't delete temp file: {ex.Message}");
-            }
+            Trace.WriteLine($"Folder backup failed: {ex.Message}");
+            return false;
         }
     }
 
-    private static async Task CreateBackupAsync(string folderPath, string folderName)
+    /// <summary>
+    /// Groups files by their common root directory to preserve structure intelligently.
+    /// </summary>
+    private static Dictionary<string, List<string>> GroupFilesByCommonRoot(string[] files)
     {
-        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(MainWindow.Instance);
-        var picker = new FileSavePicker();
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-        picker.FileTypeChoices.Add("ZIP Archive", new List<string>() { ".zip" });
-        picker.SuggestedFileName = $"{folderName}_backup_{DateTime.Now:yyyyMMdd_HHmmss}";
-        picker.SuggestedStartLocation = PickerLocationId.Desktop;
+        var result = new Dictionary<string, List<string>>();
 
-        var file = await picker.PickSaveFileAsync();
-        if (file == null) return;
+        if (files.Length == 0)
+            return result;
 
-        var zipPath = Path.Combine(Path.GetTempPath(), $"temp_backup_{Guid.NewGuid()}.zip");
+        // If all files share a common root, use it
+        string commonRoot = FindCommonRoot(files);
 
-        try
+        if (!string.IsNullOrEmpty(commonRoot))
         {
-            using (var zip = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+            result[commonRoot] = files.ToList();
+        }
+        else
+        {
+            // Files are scattered, group by drive or use empty root
+            result[string.Empty] = files.ToList();
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Finds the common root directory for a set of file paths.
+    /// </summary>
+    private static string FindCommonRoot(string[] paths)
+    {
+        if (paths.Length == 0)
+            return string.Empty;
+
+        if (paths.Length == 1)
+            return Path.GetDirectoryName(paths[0]) ?? string.Empty;
+
+        var directories = paths.Select(p => Path.GetDirectoryName(p) ?? string.Empty).ToArray();
+        var firstDir = directories[0];
+
+        if (string.IsNullOrEmpty(firstDir))
+            return string.Empty;
+
+        var commonParts = firstDir.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).ToList();
+
+        foreach (var dir in directories.Skip(1))
+        {
+            if (string.IsNullOrEmpty(dir))
+                return string.Empty;
+
+            var parts = dir.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            for (int i = 0; i < commonParts.Count; i++)
             {
-                foreach (var filePath in Directory.GetFiles(folderPath, "*", SearchOption.AllDirectories))
+                if (i >= parts.Length || !commonParts[i].Equals(parts[i], StringComparison.OrdinalIgnoreCase))
                 {
-                    var relativePath = Path.GetRelativePath(folderPath, filePath);
-                    zip.CreateEntryFromFile(filePath, relativePath, CompressionLevel.Optimal);
+                    commonParts = commonParts.Take(i).ToList();
+                    break;
                 }
             }
 
-            using var destStream = await file.OpenStreamForWriteAsync();
-            using var srcStream = File.OpenRead(zipPath);
-            await srcStream.CopyToAsync(destStream);
+            if (commonParts.Count == 0)
+                return string.Empty;
         }
-        finally
-        {
-            try
-            {
-                if (File.Exists(zipPath))
-                    File.Delete(zipPath);
-            }
-            catch (Exception ex)
-            {
-                Trace.WriteLine($"Warning: Couldn't delete temp file: {ex.Message}");
-            }
-        }
+
+        return string.Join(Path.DirectorySeparatorChar.ToString(), commonParts);
     }
+
+    #endregion
 }
-
-
-/// Blueprint:
-/// Create backup of files and parent folder?
-/// selected files are all bundled into a zipfile and a diaglogue opens where to save them, defautl to desktop
-/// Selected folder is wholly backed up the same way, user has the option to choose where to save
-/// Once user is done selecting save paths (use the same code as Vanilla RTX App's export saver, its GOOD)
-///
-/// Process subfolders?
-/// If so, GET ALL FILES in the subdirectories that match our supported extensions in the given folder
-///
-/// Pool both selected FILES and FILES retrieved from the directory (and potentially its subdirs) into one long list
-/// 
-/// Smart filters?
-/// We begin by checking through the list first: if a file ends with _mer, _mers, _heightmap or _normal (but a _normal_normal doesn't exist, which would be the true normal)
-/// we remove them
-/// Then we parse ALL texture_set.jsons retrieved from the given directory and its subdirectories, get the file paths referenced there
-/// if any match up with any files on our list, they are REMOVED. that way textures that belong to an existing texture set don't have it remade.
-/// And thus the program can be used to MEND files of PBR resource packs instead of overwriting all.
-/// 
-/// 
-/// For texture set generation:
-/// SSS?
-/// Normal or Height?
-/// Generate the json and copy files with the right suffixes in the same dir as the color texture
-///
-/// Convert to TGA?
-/// If so, call this upon ALL files in the list! this is the last step, everything that WAS ON THE LIST SO FAR, filtered and pure gets passed down to be made into a TGA
-/// The Long List.
