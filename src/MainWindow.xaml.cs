@@ -28,31 +28,6 @@ using static Texture_Set_Manager.Core.WindowControlsManager;
 
 namespace Texture_Set_Manager;
 
-/*
- * Easter egg idea: if the logo is spinning above a certain threshold and it is clicked, make the gear shoot DOWNWARD (a top margin animation) as tall as window height
- * minus twenty pixels or so, then immedietly make it stick to bottom instead, the idea is to create an illusion that the cog got shot downward into the window
- * A convincing effect is possible.
- * 
- * Actually selections should get cleared automatically upon generation completion
- * its just that, make sure the design is able and safe to MEND existing packs!
-
- * the actual texture set maker, use the current code in ToolKit as a start
- * 
- * It generates with latest format version, the texture set, and the desginated PBR maps in the same directory as the color texture!!!
- * No more extra folder creation! all is dumped onto the base dir
- * 
- * if backup is on, backs up the entire given parent folder -- for files a separate zip containing the files!
- * 
- * If convert to TGA is on, runs Targify on them before any further moves -- otherwise the texture sets are made with copies of the original format
- * perfect semantic design
- * 
- * if search subdirs is on, it searches all subdirs of the given dir
- * 
- * if smart filters are on:
- * If the color texture already ends with _mer, _mers, _heightmap or _normal (but not _normal_normal, have that smart thing copied from vrtx app's processors)
- * Use that to AVOID generating a texture set for it! call it "Smart Filters" place it next to  process subfolders, make space in the same row
- * enabled by default same as process subfolders
-*/
 
 public static class EnvironmentVariables
 {
@@ -83,9 +58,9 @@ public static class EnvironmentVariables
         public const bool enableSSS = false;
         public const string SecondaryPBRMapType = "none";
 
-        public const bool ProcessSubfolders = true;
+        public const bool ProcessSubfolders = false;
         public const bool SmartFilters = true;
-        public const bool ConvertToTarga = true;
+        public const bool ConvertToTarga = false;
         public const bool CreateBackup = true;
 
         public const string AppThemeMode = "Dark";

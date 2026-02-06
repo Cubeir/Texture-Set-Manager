@@ -104,7 +104,7 @@
                     CacheMode="BitmapCache"
                     Canvas.ZIndex="1">
 
-                <!-- Base "On" image (always visible) -->
+                <!-- icon -->
                 <Image x:Name="iconImageBox"
                        Source="ms-appx:///Assets/icon.png"
                        Height="20"
@@ -270,7 +270,7 @@
                                 CornerRadius="4,0,0,4"
                                 BorderThickness="0"
                                 IsTextScaleFactorEnabled="False"
-                                ToolTipService.ToolTip="Select folder containing textures (overrides older selections)"
+                                ToolTipService.ToolTip="Select folder containing textures (overwrites previous folder selection)"
                                 AllowDrop="True"
                                 DragOver="SelectFolderButton_DragOver"
                                 Drop="SelectFolderButton_Drop">
@@ -295,7 +295,7 @@
                                 CornerRadius="0,0,0,0"
                                 BorderThickness="0"
                                 IsTextScaleFactorEnabled="False"
-                                ToolTipService.ToolTip="Select individual texture files (overwrites previous selections)"
+                                ToolTipService.ToolTip="Select individual texture files (overwrites previous file selections)"
                                 AllowDrop="True"
                                 DragOver="SelectFilesButton_DragOver"
                                 Drop="SelectFilesButton_Drop">

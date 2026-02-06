@@ -262,7 +262,7 @@ public static class Generate
 
             if (filesList.Count == 0)
             {
-                return (false, "No files remain after filtering. All files may already have texture sets.");
+                return (false, "No processable files remain after applying Smart Filters. All files may already have texture sets.");
             }
 
             // ============================================
