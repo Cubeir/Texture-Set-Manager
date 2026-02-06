@@ -35,7 +35,7 @@
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
         DisplayName="Texture Set Manager"
-        Description="The texture set manager tool helps resource pack creators author PBR textures for their RTX or Vibrant Visuals resource packs flexibly, speeding up workflows."
+        Description="Feature-rich automation tool for Minecraft resource pack authors to generate RTX and Vibrant Visuals texture sets."
         BackgroundColor="transparent"
         Square150x150Logo="Assets\icons\Square150x150Logo.png"
         Square44x44Logo="Assets\icons\Square44x44Logo.png">
