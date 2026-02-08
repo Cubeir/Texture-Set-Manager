@@ -1,5 +1,5 @@
 # Texture Set Manager
-Feature-rich automation tool for Minecraft Bedrock Edition resource pack authors to generate RTX and Vibrant Visuals texture sets.  
+Feature-rich automation tool for Minecraft Bedrock Edition resource pack authors to generate texture sets for RTX or Vibrant Visuals.
 
 <!-- Microsoft Store badge -->
 <p align="center">
