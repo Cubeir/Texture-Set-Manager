@@ -29,7 +29,7 @@
                 <Grid Width="256"
                       Height="256">
                     <Image x:Name="SplashLamp"
-                           Source="ms-appx:///Assets/icons/SplashScreen.png"
+                           Source="ms-appx:///Assets/icon.png"
                            Width="192"
                            Height="192"
                            Opacity="1.0"
