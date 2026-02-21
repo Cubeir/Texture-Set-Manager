@@ -28,6 +28,8 @@ using static Texture_Set_Manager.Core.WindowControlsManager;
 
 namespace Texture_Set_Manager;
 
+// In the hindsight it would've been a good idea to link the official doc in the app 🤣
+// redo the render with an actual 3d gear instead of the flat thing, and with higer res window sshot, that one is fugly
 
 public static class EnvironmentVariables
 {
