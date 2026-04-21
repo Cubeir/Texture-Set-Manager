@@ -295,7 +295,8 @@ public sealed partial class MainWindow : Window
             // Color of that little border next to the button 🍝
             if (enableSSS)
             {
-                LeftEdgeOfSSSButton.BorderBrush = new SolidColorBrush((Color)Application.Current.Resources["SystemAccentColorLight3"]);
+                var accentColorKey = theme == ElementTheme.Light ? "SystemAccentColorLight1" : "SystemAccentColorLight3";
+                LeftEdgeOfSSSButton.BorderBrush = new SolidColorBrush((Color)Application.Current.Resources[accentColorKey]);
             }
             else
             {
@@ -850,8 +851,9 @@ public sealed partial class MainWindow : Window
     {
         enableSSS = true;
         Log("Enabled Subsurface Scattering", LogLevel.Informational);
-
-        LeftEdgeOfSSSButton.BorderBrush = new SolidColorBrush((Color)Application.Current.Resources["SystemAccentColorLight3"]);
+        var theme = LeftEdgeOfSSSButton.ActualTheme;
+        var accentColorKey = theme == ElementTheme.Light ? "SystemAccentColorLight1" : "SystemAccentColorLight3";
+        LeftEdgeOfSSSButton.BorderBrush = new SolidColorBrush((Color)Application.Current.Resources[accentColorKey]);
     }
     private void IncludeSubsurfaceScatteringToggle_Unchecked(object sender, RoutedEventArgs e)
     {
