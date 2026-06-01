@@ -31,6 +31,12 @@ namespace Texture_Set_Manager;
 // In the hindsight it would've been a good idea to link the official doc in the app 🤣
 // redo the render with an actual 3d gear instead of the flat thing, and with higer res window sshot, that one is fugly
 
+// Does the texture set manager actually generate files in the same format as input?
+// what does the conver to tga button to exactly? both input and output become tga? or?!
+// make it make sense
+// convert to tga must turn ONLY THE OUTPUT to TGA?
+// And output should OTHERWISE MATCH the format of INPUT
+
 public static class EnvironmentVariables
 {
     public static string? appVersion = null;
