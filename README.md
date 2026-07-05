@@ -31,7 +31,7 @@ Feature-rich automation tool for Minecraft Bedrock Edition resource pack authors
 - Enable or disable Subsurface Scattering property.
 - Select secondary PBR texture type, this could either be a Normal Map or a Heightmap, set to none to generate MER(s) only.
 - Process Subfolders: If enabled, all subfolders of the selected folder are also processed.
-- Smart Filters: sExcludes PBR texture generation for files that are already part of a PBR texture set, this is figured out in in two passes:  
+- Smart Filters: Excludes PBR texture generation for files that are already part of a PBR texture set, this is figured out in in two passes:  
   1. Files that already end with the the conventional PBR texture suffixes (`_mer(s)`, `_normal` or `_heightmap`) are excluded
   > Something to be aware of: It also attempts to figures out whether the _normal suffix indicates a _block variant_ as opposed to a _normal PBR texture_, so there's lesser chance of falsely excluding color textures! e.g. sand_normal isn't excluded if sand_normal_normal exists.
   2. All existing `*.texture_set.json` files are parsed and files referenced by them are excluded as well.
@@ -43,7 +43,7 @@ After configuring your generation parameters, press generate button for texture 
 
 Now you have a readily-available template to work on! 🎉  
 Modify the textures ending with `_mer(s)`, `_normal` or `_heightmap` suffixes to shape up your PBR resource pack!
-If you need further information, check out the [official documentation](https://learn.microsoft.com/en-us/minecraft/creator/documents/vibrantvisuals/pbroverview?view=minecraft-bedrock-stable).
+If you need more info, check out the [official Bedrock Edition PBR documentation](https://learn.microsoft.com/en-us/minecraft/creator/documents/vibrantvisuals/pbroverview?view=minecraft-bedrock-stable).
 
 For app support, head over to the [Vanilla RTX Discord](https://discord.gg/A4wv4wwYud) server's forum channel, or open an issue here.
 Click the log section beneath the generate button to copy debug logs, plenty useful to attach these when reporting issues!
