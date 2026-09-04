@@ -189,7 +189,7 @@ public static class Helpers
     /// <summary>
     /// Converts the given images to Targa in place: the .tga is written next to the
     /// original and the original is deleted. Files that are already .tga are left
-    /// completely untouched — re-encoding them would be pure churn (and would rewrite
+    /// completely untouched – re-encoding them would be pure churn (and would rewrite
     /// bytes the artist may have authored deliberately).
     /// Returns the resulting path for every input, in the same order.
     /// </summary>
@@ -216,7 +216,7 @@ public static class Helpers
                     continue;
                 }
 
-                // Already Targa — nothing to convert, nothing to delete.
+                // Already Targa – nothing to convert, nothing to delete.
                 if (extension == ".tga")
                 {
                     Trace.WriteLine($"Already TGA, left as-is: {originalPath}");

@@ -8,7 +8,7 @@ namespace Texture_Set_Manager.Core;
 
 /// <summary>
 /// Single place where theme-dependent colors are decided. Nothing here subscribes to
-/// anything — callers own their subscriptions and are responsible for unhooking them,
+/// anything – callers own their subscriptions and are responsible for unhooking them,
 /// which is precisely why this replaced the old fire-and-forget ThemeWatcher that kept
 /// poking at a window long after it had been closed.
 /// </summary>
@@ -53,13 +53,13 @@ public static class ThemeService
     /// <summary>
     /// Color for one edge of the "fake split button" bevel decoration drawn between
     /// adjacent buttons. Left edge always reads the "bright" source, right edge the
-    /// "dark" source — accented=true when the button the bevel belongs to represents an
+    /// "dark" source – accented=true when the button the bevel belongs to represents an
     /// active/highlighted state (a checked toggle), accented=false for the resting state.
     /// </summary>
     public static Color GetBevelColor(ElementTheme theme, BevelEdge edge, bool accented, bool isEnabled = true)
     {
         // Disabled state always falls back to the resting (non-accented) bevel, dimmed,
-        // regardless of what the enabled state would've shown — this way re-enabling just
+        // regardless of what the enabled state would've shown – this way re-enabling just
         // re-runs the normal accented/resting logic and the bevel snaps back exactly as
         // if nothing had happened.
         if (!isEnabled)

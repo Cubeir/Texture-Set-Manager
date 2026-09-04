@@ -19,7 +19,7 @@ public static class TextureSetJson
     /// <summary>
     /// Parsing tolerance for texture sets we didn't write. Resource packs are hand-edited far
     /// more often than they're generated, and the previous JSON stack accepted comments and
-    /// trailing commas — System.Text.Json rejects both by default, so a pack that opened fine
+    /// trailing commas – System.Text.Json rejects both by default, so a pack that opened fine
     /// yesterday would suddenly be "invalid". These options keep that tolerance.
     /// </summary>
     public static readonly JsonDocumentOptions DocumentOptions = new()
@@ -50,7 +50,7 @@ public sealed class TextureSetDocument
 }
 
 /// <summary>
-/// MER and MERS are mutually exclusive, as are normal and heightmap — the unused ones stay null
+/// MER and MERS are mutually exclusive, as are normal and heightmap – the unused ones stay null
 /// and are omitted entirely rather than written as null, which the game would reject.
 /// </summary>
 public sealed class TextureSetLayers

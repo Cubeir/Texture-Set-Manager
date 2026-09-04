@@ -102,7 +102,7 @@ public partial class App : Application
         {
             // Anything that escapes here means the app never became usable. The UnhandledException
             // hook can't see it (this is async void, past the first await), so record it directly
-            // — otherwise a startup crash is the one crash that leaves no report behind.
+            // – otherwise a startup crash is the one crash that leaves no report behind.
             WriteCrashLog("OnLaunched", ex.Message, ex.ToString());
             throw;
         }

@@ -13,7 +13,7 @@ namespace Texture_Set_Manager.Core;
 /// A modal "here is a wall of text you probably want to keep" dialog: scrollable monospaced
 /// body, a copy-to-clipboard button, and optional links.
 ///
-/// Exists because the sidebar log is a stream — anything long scrolls away or gets skimmed
+/// Exists because the sidebar log is a stream – anything long scrolls away or gets skimmed
 /// past, and reports the user is meant to act on (a crash from last session, a list of
 /// textures to go fix) shouldn't rely on them noticing. The dialog puts it in front of them
 /// once; the log still keeps its copy for later.

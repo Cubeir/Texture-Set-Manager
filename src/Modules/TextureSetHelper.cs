@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -196,7 +196,7 @@ public static class TextureSetHelper
         public bool IsSubsurface { get; init; }
 
         /// <summary>
-        /// Layers the JSON declares but that resolve to nothing — a texture name with no matching
+        /// Layers the JSON declares but that resolve to nothing – a texture name with no matching
         /// file in any supported extension. Without this the layer would just come back null and
         /// be indistinguishable from "not declared at all", which hides a genuine pack error from
         /// anything reporting on the set.
@@ -352,7 +352,7 @@ public static class TextureSetHelper
     {
         // If the color layer loads fine but the MER or normal layer then *throws* while
         // loading (rather than just returning null), the already-loaded bitmaps would
-        // never be disposed — a real (if rare) native GDI+ handle + memory leak. Track
+        // never be disposed – a real (if rare) native GDI+ handle + memory leak. Track
         // everything allocated here and dispose it on any failure path via `finally`.
         Bitmap? colorBmp = null;
         Bitmap? merBmp = null;
@@ -411,7 +411,7 @@ public static class TextureSetHelper
         }
     }
 
-    /// <summary>Batch convenience wrapper — loads every resolved set sequentially.</summary>
+    /// <summary>Batch convenience wrapper – loads every resolved set sequentially.</summary>
     public static IReadOnlyList<LoadedTextureSet> LoadTextureSets(IReadOnlyList<ResolvedTextureSet> resolved)
     {
         var results = new List<LoadedTextureSet>(resolved.Count);
@@ -591,7 +591,7 @@ public static class TextureSetHelper
                 {
                     // EnsureArgb32 returns the *same* instance when bmp is already
                     // Format32bppArgb (the common case), so only dispose the canonical
-                    // copy when it's actually a new object — otherwise we'd be disposing
+                    // copy when it's actually a new object – otherwise we'd be disposing
                     // the caller's bitmap out from under them.
                     var canonical = EnsureArgb32(bmp);
                     try { canonical.Save(originalPath, ImageFormat.Png); }

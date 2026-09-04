@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -311,7 +311,7 @@ public static class Generate
                         }
                     };
 
-                    // Write JSON file — through the source-generated context, so trimmed release
+                    // Write JSON file – through the source-generated context, so trimmed release
                     // builds don't need reflection metadata that isn't there.
                     string jsonPath = Path.Combine(outputDirectory, fileNameWithoutExt + ".texture_set.json");
                     string jsonContent = JsonSerializer.Serialize(textureSet, TextureSetJsonContext.Default.TextureSetDocument);

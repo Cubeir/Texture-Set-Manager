@@ -16,7 +16,7 @@ namespace Texture_Set_Manager.Modules;
 ///
 /// Why that matters: this app (and every other template generator) seeds MER/normal/heightmap
 /// files as straight copies of the color texture. A layer that is *still* a byte-identical copy
-/// long after generation is almost certainly one the artist never got around to painting — it's
+/// long after generation is almost certainly one the artist never got around to painting – it's
 /// dead weight in the pack and produces nonsense PBR data in-game. Rather than eyeballing
 /// hundreds of files, this hands the author a list of exactly which ones to go after.
 /// </summary>
@@ -100,7 +100,7 @@ public static class TextureSetAnalyzer
                 ColorDescription = rs.Color.Describe(),
             };
 
-            // Layers are loaded lazily and disposed as soon as the comparison is done — a
+            // Layers are loaded lazily and disposed as soon as the comparison is done – a
             // deep pack can hold thousands of texture sets and we never want more than one
             // set's worth of bitmaps alive at a time.
             TextureSetHelper.LoadedTextureSet? lts = null;
@@ -191,7 +191,7 @@ public static class TextureSetAnalyzer
             };
         }
 
-        // Same file referenced twice is identical by definition — no need to decode-compare.
+        // Same file referenced twice is identical by definition – no need to decode-compare.
         var samePath = !layer.IsInline && !colorLayer.IsInline &&
                        string.Equals(layer.FilePath, colorLayer.FilePath, StringComparison.OrdinalIgnoreCase);
 
@@ -265,7 +265,7 @@ public static class TextureSetAnalyzer
                 if (count > 0) breakdown.Add($"{count} {role.ToString().ToUpperInvariant()}");
             }
             sb.AppendLine($"Breakdown: {string.Join(", ", breakdown)}.");
-            sb.AppendLine("These are most likely untouched template copies — worth painting or removing.");
+            sb.AppendLine("These are most likely untouched template copies – worth painting or removing.");
         }
 
         var missing = report.SetsWithMissingLayers.ToList();
@@ -285,7 +285,7 @@ public static class TextureSetAnalyzer
         return sb.ToString().TrimEnd();
     }
 
-    /// <summary>Full, uncapped listing — goes to the trace log so the sidebar stays readable.</summary>
+    /// <summary>Full, uncapped listing – goes to the trace log so the sidebar stays readable.</summary>
     public static string BuildTraceReport(AnalysisReport report)
     {
         var sb = new StringBuilder();

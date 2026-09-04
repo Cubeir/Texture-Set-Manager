@@ -20,7 +20,7 @@ public class WindowControlsManager
         "DonateButton", "ChatButton", "CycleThemeButton", "SidebarLog",
     };
 
-    // Reference-counted lock state, keyed by control INSTANCE (identity-based dictionary —
+    // Reference-counted lock state, keyed by control INSTANCE (identity-based dictionary –
     // Control doesn't override Equals/GetHashCode, so this is safe). A control's IsEnabled is
     // restored only once its lock count returns to zero, so overlapping disable sessions can
     // no longer stomp on each other.
@@ -64,7 +64,7 @@ public class WindowControlsManager
 
     // Window.Content throws COMException instead of returning null once the native window has
     // been torn down (e.g. a callback fires through a captured "this" after close). Swallow
-    // that specific case — there's nothing left to toggle on a dead window — but let anything
+    // that specific case – there's nothing left to toggle on a dead window – but let anything
     // else bubble up.
     private static UIElement? TryGetContent(Window window)
     {
@@ -79,7 +79,7 @@ public class WindowControlsManager
     }
 
     /// <summary>
-    /// Emergency reset — force-clears every lock on every control in the window regardless of
+    /// Emergency reset – force-clears every lock on every control in the window regardless of
     /// count. Not part of normal flow; use only if a window can be torn down without its
     /// Closed handler running (crash, forced termination, etc).
     /// </summary>
@@ -120,7 +120,7 @@ public class WindowControlsManager
         foreach (var control in controls)
         {
             if (!_lockCounts.TryGetValue(control, out var count) || count <= 0)
-                continue; // never locked / already released — ignore stray release, don't go negative
+                continue; // never locked / already released – ignore stray release, don't go negative
 
             count--;
             if (count == 0)
@@ -244,7 +244,7 @@ public class ProgressBarManager
     }
 
     /// <summary>
-    /// Shows the progress bar in indeterminate mode. Multiple calls are safe — the bar stays
+    /// Shows the progress bar in indeterminate mode. Multiple calls are safe – the bar stays
     /// visible until all operations complete.
     /// </summary>
     public void ShowProgress()

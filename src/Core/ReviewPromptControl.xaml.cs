@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
@@ -80,7 +80,7 @@ public static class ReviewPromptManager
 {
     private const string FIRST_LAUNCH_KEY = "ReviewPromptFirstLaunchTime";
     // Keyed by version so "don't show again" lapses on a Major or Minor update (not on new
-    // builds/revisions) — a user who dismissed the prompt two feature releases ago is a
+    // builds/revisions) – a user who dismissed the prompt two feature releases ago is a
     // reasonable person to ask once more.
     private static readonly string DONT_SHOW_KEY = $"ReviewPromptDontShow_{EnvironmentVariables.appVersionMajorMinor}";
     private const string LAST_PROMPT_KEY = "ReviewPromptLastPromptTime";

@@ -125,7 +125,7 @@ public sealed partial class MainWindow : Window
     private readonly WindowStateManager _windowStateManager;
 
     // Everything that keeps running after the window is gone has to be told to stop, and
-    // every handler hung off the content tree has to be unhooked — leaving a theme listener
+    // every handler hung off the content tree has to be unhooked – leaving a theme listener
     // (or a DispatcherTimer) alive past Closed is exactly what used to spit a crash minidump
     // into the temp folder on every single exit.
     private bool _isClosing = false;
@@ -166,7 +166,7 @@ public sealed partial class MainWindow : Window
         // Do upon app closure
         this.Closed += MainWindow_Closed;
 
-        // Fake titlebar buttons aren't real caption buttons, so nothing dims them automatically —
+        // Fake titlebar buttons aren't real caption buttons, so nothing dims them automatically –
         // mirror the system's inactive-titlebar look by hand.
         this.Activated += MainWindow_ActivationChanged;
 
@@ -189,7 +189,7 @@ public sealed partial class MainWindow : Window
         // minidump in the temp folder.
         Safely(SaveSettings);
 
-        // Stop every timer BEFORE the content tree goes away — a DispatcherTimer that ticks into
+        // Stop every timer BEFORE the content tree goes away – a DispatcherTimer that ticks into
         // a dead window doesn't raise a catchable exception, it takes the process with it.
         Safely(() => { _typewriterTimer?.Stop(); _typewriterTimer = null; });
         Safely(() => { rotationTimer?.Stop(); rotationTimer = null; });
@@ -252,7 +252,7 @@ public sealed partial class MainWindow : Window
             await Task.Delay(50);
 
             // Apply theme-driven colors once, then keep them in sync. Both subscriptions are
-            // torn down in MainWindow_Closed — see the note on _isClosing.
+            // torn down in MainWindow_Closed – see the note on _isClosing.
             if (root != null)
             {
                 ThemeService.ApplyTitleBarColors(this.AppWindow, root.ActualTheme);
@@ -936,7 +936,7 @@ public sealed partial class MainWindow : Window
 
     /// <summary>
     /// Picks a folder and reports every PBR texture in it that's still a byte-for-byte copy of
-    /// its own color texture — i.e. the templates nobody ever got around to painting. Read-only:
+    /// its own color texture – i.e. the templates nobody ever got around to painting. Read-only:
     /// this never touches a file.
     /// </summary>
     private async void AnalyzeTextureSetsMenuItem_Click(object sender, RoutedEventArgs e)
@@ -968,7 +968,7 @@ public sealed partial class MainWindow : Window
             var flagged = report.FlaggedSets.Any();
             var summary = TextureSetAnalyzer.BuildLogReport(report);
 
-            // Log it for the record, then put it in front of the user — a report they're meant
+            // Log it for the record, then put it in front of the user – a report they're meant
             // to act on is far too easy to scroll past in the sidebar.
             Log(summary, flagged ? LogLevel.Warning : LogLevel.Success);
 
@@ -978,7 +978,7 @@ public sealed partial class MainWindow : Window
                 title: "Texture Set Report",
                 intro: flagged
                     ? "Some PBR textures are still identical to their color texture. Those are almost always template "
-                    + "copies that were never painted — worth going back to, or removing from the pack."
+                    + "copies that were never painted – worth going back to, or removing from the pack."
                     : "Nothing looks left over from a template. Here's the full result:",
                 body: summary,
                 copyButtonText: "Copy Report");
@@ -1004,7 +1004,7 @@ public sealed partial class MainWindow : Window
     /// reference, leaving the color textures alone.
     ///
     /// This is destructive and there is no undo, so the scope prompt is deliberately mandatory:
-    /// it names the folder, and Cancel is its default button. That prompt is the confirmation —
+    /// it names the folder, and Cancel is its default button. That prompt is the confirmation –
     /// there is no path from clicking the menu item to deleting a file without answering it.
     /// </summary>
     private async void StripTextureSetsMenuItem_Click(object sender, RoutedEventArgs e)
@@ -1040,13 +1040,13 @@ public sealed partial class MainWindow : Window
 
             if (result.TextureSetsDeleted == 0 && result.TexturesDeleted == 0)
             {
-                Log("Nothing to strip — no texture sets were found in that scope.", LogLevel.Informational);
+                Log("Nothing to strip – no texture sets were found in that scope.", LogLevel.Informational);
                 return;
             }
 
             var message = $"Removed {result.TextureSetsDeleted} texture set(s) and {result.TexturesDeleted} PBR texture(s). Color textures were left untouched.";
             if (result.Failed > 0)
-                message += $" {result.Failed} file(s) could not be deleted — they may be open in another program.";
+                message += $" {result.Failed} file(s) could not be deleted – they may be open in another program.";
 
             Log(message, result.Failed > 0 ? LogLevel.Warning : LogLevel.Success);
         }
@@ -1291,8 +1291,8 @@ public sealed partial class MainWindow : Window
     private static readonly Lock _logGate = new();
 
     // Typewriter state, only ever touched on the UI thread, inside TypewriterTick().
-    // Logger writes fast; typewriter reveals it to the UI on its own schedule — always the
-    // oldest not-yet-shown entry first, left-to-right within it — so chronology holds up
+    // Logger writes fast; typewriter reveals it to the UI on its own schedule – always the
+    // oldest not-yet-shown entry first, left-to-right within it – so chronology holds up
     // AND each message types start-to-finish instead of finish-to-start.
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _typewriterTimer;
     private ScrollViewer? _logScrollViewer;
@@ -1323,10 +1323,10 @@ public sealed partial class MainWindow : Window
         catch { return 16; }
     }))();
 
-    // Structural marker ONLY — never rendered, never typed character-by-character
+    // Structural marker ONLY – never rendered, never typed character-by-character
     private const string EntrySentinel = "\uE000\uE001";
 
-    // Idle/typing cursor — sits at the current write-head
+    // Idle/typing cursor – sits at the current write-head
     private const bool ShowTypingCursor = false;
     private const int CursorBlinkMs = 750;
     private const string CursorOnGlyph = " |";
@@ -1334,7 +1334,7 @@ public sealed partial class MainWindow : Window
 
     /// <summary>
     /// Thread-safe from anywhere: this only appends to a string behind a lock. Nothing here
-    /// touches the UI, so there's no dispatcher hop and no ordering surprise — the typewriter
+    /// touches the UI, so there's no dispatcher hop and no ordering surprise – the typewriter
     /// picks the text up on its own schedule.
     /// </summary>
     public static void Log(string message, LogLevel? level = null)
@@ -1400,10 +1400,10 @@ public sealed partial class MainWindow : Window
                     current = current[..cut];
                     LogText = current;
 
-                    // Trimmed content came off the tail — exactly where _settledLength measures
-                    // from — so shrink it by the same amount. If the cut reached into content that
+                    // Trimmed content came off the tail – exactly where _settledLength measures
+                    // from – so shrink it by the same amount. If the cut reached into content that
                     // wasn't fully settled yet (only possible under an extreme backlog), just reset
-                    // both — the next tick starts clean against the trimmed text.
+                    // both – the next tick starts clean against the trimmed text.
                     if (trimmedAmount > _settledLength)
                     {
                         _settledLength = 0;
@@ -1434,7 +1434,7 @@ public sealed partial class MainWindow : Window
             var activeStart = sepIndex >= 0 ? sepIndex + EntrySentinel.Length : 0;
             var activeTextLength = searchLength - activeStart; // entry's OWN text only, sentinel excluded
 
-            var remaining = unshownLength - _activeRevealed; // whole backlog left — drives speed-up
+            var remaining = unshownLength - _activeRevealed; // whole backlog left – drives speed-up
             var charsThisTick = (int)Math.Max(BaselineCharsPerTick, Math.Ceiling(remaining * CatchUpFraction));
 
             _activeRevealed = Math.Min(activeTextLength, _activeRevealed + charsThisTick);
@@ -1442,7 +1442,7 @@ public sealed partial class MainWindow : Window
 
             if (_activeRevealed >= activeTextLength)
             {
-                // Entry fully typed — fold it (and its sentinel, converted to a real blank
+                // Entry fully typed – fold it (and its sentinel, converted to a real blank
                 // line) into settled INSTANTLY. The separator is never itself "typed."
                 _settledLength = current.Length - activeStart;
                 _activeRevealed = 0;
@@ -1492,7 +1492,7 @@ public sealed partial class MainWindow : Window
     }
 
     // Never reveal a cut that splits a surrogate pair or strands an emoji's
-    // variation-selector/combining mark — grows past them instead of stopping mid-glyph.
+    // variation-selector/combining mark – grows past them instead of stopping mid-glyph.
     private static int SnapForward(string s, int rangeStart, int localIndex)
     {
         var i = rangeStart + localIndex;
