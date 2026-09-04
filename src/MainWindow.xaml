@@ -241,21 +241,44 @@
                             Margin="4,6,4,6"
                             Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
-                    <!-- Texture Set Report Button -->
-                    <Button x:Name="AnalyzeTextureSetsButton"
+                    <!-- Texture Set Tools -->
+                    <Button x:Name="TextureSetToolsButton"
                             Grid.Column="6"
                             FontFamily="{ThemeResource SymbolThemeFontFamily}"
                             Style="{StaticResource SubtleButtonStyle}"
-                            Content="&#xE9D9;"
+                            Content="&#xEC7A;"
                             Width="42"
                             Height="35"
                             CornerRadius="0"
                             FontSize="16"
                             Background="Transparent"
                             BorderBrush="Transparent"
-                            Click="AnalyzeTextureSetsButton_Click"
-                            ToolTipService.ToolTip="Inspect a folder's texture sets and report every PBR texture that is still identical to its color texture (most likely an untouched template)."
-                            IsTextScaleFactorEnabled="False" />
+                            ToolTipService.ToolTip="Texture set tools"
+                            IsTextScaleFactorEnabled="False">
+                        <Button.Flyout>
+                            <MenuFlyout Placement="Bottom">
+                                <MenuFlyoutItem x:Name="AnalyzeTextureSetsMenuItem"
+                                                Text="Analyze texture sets"
+                                                Click="AnalyzeTextureSetsMenuItem_Click"
+                                                ToolTipService.ToolTip="Pick a folder and report every PBR texture that is still identical to its color texture (most likely an untouched template). Always searches subfolders. Reads only, changes nothing.">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE9D9;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+
+                                <MenuFlyoutSeparator />
+
+                                <MenuFlyoutItem x:Name="StripTextureSetsMenuItem"
+                                                Text="Strip all texture sets"
+                                                Click="StripTextureSetsMenuItem_Click"
+                                                ToolTipService.ToolTip="Pick a folder and delete every texture set along with the MER/MERS, normal and heightmap textures they reference, leaving only the color textures. You will be asked to choose a scope before anything is deleted.">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE74D;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
                 </Grid>
             </Border>
 
@@ -477,11 +500,12 @@
                             </ToggleButton.ContentTemplate>
                         </ToggleButton>
 
-                        <!-- Overlay borders for the visual split. Both edges of this seam belong
-                             to the Subsurface Scattering button and are driven together from code
-                             (ApplySSSBevelColors) so they accent when it's checked, dim when it's
-                             disabled, and follow the theme. -->
-                        <!-- Dark border on RIGHT edge of left button -->
+                        <!-- Overlay borders for the visual split. Each half of the seam belongs to
+                             the button it touches and is driven from code (ApplySSSBevelColors) so it
+                             dims when that button is disabled and follows the theme. Only the SSS
+                             side takes the accent when the toggle is checked - the other half is the
+                             dropdown's edge, and the dropdown has no accented state to represent. -->
+                        <!-- Dark border on RIGHT edge of the dropdown -->
                         <Grid Grid.Column="0"
                               HorizontalAlignment="Right"
                               Width="3"
@@ -490,10 +514,10 @@
                             <Rectangle Fill="{ThemeResource ButtonBackgroundThemeBrush}" />
                             <Border BorderBrush="{ThemeResource FakeSplitButtonDarkBorderColor}"
                                     BorderThickness="3,0,0,0"
-                                    x:Name="DarkEdgeOfSSSButton" />
+                                    x:Name="RightEdgeOfSecondaryPBRDropDown" />
                         </Grid>
 
-                        <!-- Bright border on LEFT edge of right button -->
+                        <!-- Bright border on LEFT edge of the SSS button -->
                         <Grid Grid.Column="2"
                               HorizontalAlignment="Left"
                               Width="3"

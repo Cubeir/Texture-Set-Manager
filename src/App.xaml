@@ -14,21 +14,21 @@
             <!-- Other app resources here -->
             <Style TargetType="TextBlock">
                 <Setter Property="FontFamily"
-                        Value="Segoe UI" />
+                        Value="{ThemeResource ContentControlThemeFontFamily}" />
             </Style>
             <Style TargetType="FontIcon">
                 <Setter Property="FontFamily"
-                        Value="Segoe Fluent Icons" />
+                        Value="{ThemeResource SymbolThemeFontFamily}" />
             </Style>
             <Style x:Key="TextBlockSegIcons"
                    TargetType="TextBlock">
                 <Setter Property="FontFamily"
-                        Value="Segoe Fluent Icons" />
+                        Value="{ThemeResource SymbolThemeFontFamily}" />
             </Style>
             <Style x:Key="ButtonSegIcons"
                    TargetType="Button">
                 <Setter Property="FontFamily"
-                        Value="Segoe Fluent Icons" />
+                        Value="{ThemeResource SymbolThemeFontFamily}" />
             </Style>
 
             <ResourceDictionary.ThemeDictionaries>
@@ -39,7 +39,7 @@
                     <Color x:Key="FakeSplitButtonBrightBorderColor">#4A6E6E6E</Color>
                     <Visibility x:Key="LightThemeBackgroundVisibility">Collapsed</Visibility>
                     <SolidColorBrush x:Key="IntersectionNeutralizerBrush"
-                                     Color="#20000000" />
+                                     Color="#15000000" />
 
                     <Color x:Key="OverlayBackgroundColor">#C0202020</Color>
                     <SolidColorBrush x:Key="OverlayTextBrush"
@@ -50,10 +50,10 @@
                 <!-- Light theme -->
                 <ResourceDictionary x:Key="Light">
                     <Color x:Key="FakeSplitButtonDarkBorderColor">#7AFAFAFA</Color>
-                    <Color x:Key="FakeSplitButtonBrightBorderColor">#F5FEFEFE</Color>
+                    <Color x:Key="FakeSplitButtonBrightBorderColor">#FBFBFBFB</Color>
                     <Visibility x:Key="LightThemeBackgroundVisibility">Visible</Visibility>
                     <SolidColorBrush x:Key="IntersectionNeutralizerBrush"
-                                     Color="#37FFFFFF" />
+                                     Color="#FFFFFFFF" />
 
                     <Color x:Key="OverlayBackgroundColor">#C0F0F0F0</Color>
                     <SolidColorBrush x:Key="OverlayTextBrush"

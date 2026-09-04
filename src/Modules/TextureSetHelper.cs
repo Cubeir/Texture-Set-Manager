@@ -1,10 +1,12 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using static Texture_Set_Manager.Modules.Helpers;
 
 namespace Texture_Set_Manager.Modules;
@@ -31,9 +33,10 @@ public static class TextureSetHelper
         public int InlineChannels { get; }
         /// <summary>True when the source was a hex string (e.g. "#B48CBE").</summary>
         public bool IsHex { get; }
-        public JToken SourceToken { get; }
+        /// <summary>The node this layer was parsed from; null for file-backed layers.</summary>
+        public JsonNode? SourceToken { get; }
 
-        private TextureLayerValue(JToken sourceToken, byte[] rgba, int originalChannels, bool isHex)
+        private TextureLayerValue(JsonNode? sourceToken, byte[] rgba, int originalChannels, bool isHex)
         {
             IsInline = true;
             SourceToken = sourceToken;
@@ -45,24 +48,26 @@ public static class TextureSetHelper
         private TextureLayerValue(string filePath)
         {
             FilePath = filePath;
-            SourceToken = JValue.CreateNull();
+            SourceToken = null;
         }
 
         public static TextureLayerValue FromFile(string path) => new(path);
 
-        public static TextureLayerValue? TryParseInline(JToken token)
+        public static TextureLayerValue? TryParseInline(JsonNode? token)
         {
+            if (token == null) return null;
+
             // Hex string
-            if (token.Type == JTokenType.String)
+            if (token.GetValueKind() == JsonValueKind.String)
             {
-                var s = token.Value<string>()!.Trim();
+                var s = token.GetValue<string>().Trim();
                 if (s.StartsWith('#') && TryParseHex(s, out var rgba, out var originalChannels))
                     return new TextureLayerValue(token, rgba, originalChannels, isHex: true);
                 return null;
             }
 
             // Array of numbers (RGB triplet or RGBA quadruplet)
-            if (token is JArray arr && arr.Count is 3 or 4)
+            if (token is JsonArray arr && arr.Count is 3 or 4)
             {
                 var originalChannels = arr.Count;
                 var comps = new byte[originalChannels];
@@ -89,7 +94,7 @@ public static class TextureSetHelper
 
             if (hex.Length == 6)
             {
-                if (!uint.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out var v))
+                if (!uint.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var v))
                     return false;
                 rgba = new[] { (byte)(v >> 16), (byte)(v >> 8), (byte)v, (byte)255 };
                 originalChannels = 3;
@@ -97,7 +102,7 @@ public static class TextureSetHelper
             }
             if (hex.Length == 8)
             {
-                if (!uint.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out var v))
+                if (!uint.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var v))
                     return false;
                 rgba = new[] { (byte)(v >> 24), (byte)(v >> 16), (byte)(v >> 8), (byte)v };
                 originalChannels = 4;
@@ -106,15 +111,23 @@ public static class TextureSetHelper
             return false;
         }
 
-        private static bool TryGetByte(JToken t, out byte b)
+        private static bool TryGetByte(JsonNode? t, out byte b)
         {
             b = 0;
+            if (t == null) return false;
+
             double d;
-            if (t.Type == JTokenType.Float || t.Type == JTokenType.Integer)
-                d = t.Value<double>();
-            else if (t.Type == JTokenType.String && double.TryParse(t.Value<string>(), out d))
-            { /* ok */ }
-            else return false;
+            switch (t.GetValueKind())
+            {
+                case JsonValueKind.Number:
+                    d = t.GetValue<double>();
+                    break;
+                case JsonValueKind.String when double.TryParse(
+                        t.GetValue<string>(), NumberStyles.Float, CultureInfo.InvariantCulture, out d):
+                    break;
+                default:
+                    return false;
+            }
 
             b = (byte)Math.Clamp((int)Math.Round(d), 0, 255);
             return true;
@@ -133,21 +146,24 @@ public static class TextureSetHelper
         /// it was originally written in: RGB hex stays RGB hex, RGBA array stays RGBA
         /// array, etc. The alpha channel is always preserved from the bitmap as-is.
         /// </summary>
-        public JToken SerializeVirtual(Bitmap bmp)
+        public JsonNode SerializeVirtual(Bitmap bmp)
         {
             var c = bmp.GetPixel(0, 0);
             byte r = c.R, g = c.G, b = c.B, a = c.A;
 
+            // Only the non-generic JsonValue.Create overloads are used here: the generic
+            // JsonValue.Create<T> is the one flagged as unsafe for trimmed builds, and these
+            // produce nodes that serialize through the built-in primitive converters.
             if (IsHex)
             {
-                return InlineChannels == 3
-                    ? new JValue($"#{r:X2}{g:X2}{b:X2}")
-                    : new JValue($"#{r:X2}{g:X2}{b:X2}{a:X2}");
+                return JsonValue.Create(InlineChannels == 3
+                    ? $"#{r:X2}{g:X2}{b:X2}"
+                    : $"#{r:X2}{g:X2}{b:X2}{a:X2}")!;
             }
 
             return InlineChannels == 3
-                ? new JArray(r, g, b)
-                : new JArray(r, g, b, a);
+                ? new JsonArray(JsonValue.Create(r), JsonValue.Create(g), JsonValue.Create(b))
+                : new JsonArray(JsonValue.Create(r), JsonValue.Create(g), JsonValue.Create(b), JsonValue.Create(a));
         }
 
         /// <summary>Human-readable description used in reports and logs.</summary>
@@ -168,8 +184,8 @@ public static class TextureSetHelper
     public sealed class ResolvedTextureSet
     {
         public string JsonFilePath { get; init; } = "";
-        public JObject RootJson { get; init; } = new();
-        public JObject SetNode { get; init; } = new();
+        public JsonObject RootJson { get; init; } = new();
+        public JsonObject SetNode { get; init; } = new();
 
         public TextureLayerValue Color { get; init; } = null!;
         public TextureLayerValue? Mer { get; init; }
@@ -245,9 +261,14 @@ public static class TextureSetHelper
         try
         {
             var text = File.ReadAllText(jsonFile);
-            var root = JObject.Parse(text);
 
-            if (root.SelectToken("minecraft:texture_set") is not JObject set)
+            if (JsonNode.Parse(text, nodeOptions: null, TextureSetJson.DocumentOptions) is not JsonObject root)
+            {
+                Trace.WriteLine($"[TEXTURESET] Skipping '{jsonFile}': root is not a JSON object.");
+                return null;
+            }
+
+            if (root["minecraft:texture_set"] is not JsonObject set)
             {
                 Trace.WriteLine($"[TEXTURESET] Skipping '{jsonFile}': missing minecraft:texture_set node.");
                 return null;
@@ -407,27 +428,27 @@ public static class TextureSetHelper
     /// string-valued tokens qualify: an inline colour that failed to parse isn't a missing file,
     /// and a token that was never written isn't missing at all.
     /// </summary>
-    private static void NoteIfUnresolved(List<(string, string)> into, string key, JToken? token, TextureLayerValue? resolved)
+    private static void NoteIfUnresolved(List<(string, string)> into, string key, JsonNode? token, TextureLayerValue? resolved)
     {
         if (token == null || resolved != null) return;
-        if (token.Type != JTokenType.String) return;
+        if (token.GetValueKind() != JsonValueKind.String) return;
 
-        var name = token.Value<string>()?.Trim();
+        var name = token.GetValue<string>().Trim();
         if (string.IsNullOrEmpty(name)) return;
 
         into.Add((key, name));
     }
 
-    private static TextureLayerValue? ResolveLayer(string folder, JToken? token)
+    private static TextureLayerValue? ResolveLayer(string folder, JsonNode? token)
     {
         if (token == null) return null;
 
         var inline = TextureLayerValue.TryParseInline(token);
         if (inline != null) return inline;
 
-        if (token.Type != JTokenType.String) return null;
+        if (token.GetValueKind() != JsonValueKind.String) return null;
 
-        var name = token.Value<string>()!.Trim();
+        var name = token.GetValue<string>().Trim();
         if (string.IsNullOrEmpty(name)) return null;
 
         var filePath = FindTextureFile(folder, name);
@@ -542,7 +563,7 @@ public static class TextureSetHelper
         {
             try
             {
-                File.WriteAllText(rs.JsonFilePath, rs.RootJson.ToString(Newtonsoft.Json.Formatting.Indented));
+                File.WriteAllText(rs.JsonFilePath, rs.RootJson.ToJsonString(TextureSetJson.WriteOptions));
             }
             catch (Exception ex)
             {

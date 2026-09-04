@@ -18,6 +18,7 @@ public partial class App : Application
 {
     private Window? _window;
     private static Mutex? _mutex = null;
+    private static EventWaitHandle? _wakeEvent = null;
 
     /// <summary>
     /// Initializes the singleton application object.  This is the first line of authored code
@@ -55,6 +56,79 @@ public partial class App : Application
     }
 
     /// <summary>
+    /// Invoked when the application is launched.
+    /// </summary>
+    /// <param name="args">Details about the launch request and process.</param>
+    protected override async void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
+    {
+        try
+        {
+            _mutex = new Mutex(true, GetUniqueName(), out var isNewInstance);
+
+            if (!isNewInstance)
+            {
+                // Signal the already-running instance to bring itself to front. This replaced
+                // hunting for the other process by name and poking its MainWindowHandle: a
+                // packaged WinUI process doesn't reliably report one, so that approach could
+                // silently do nothing and leave the user staring at a window that never came up.
+                if (EventWaitHandle.TryOpenExisting($"{GetUniqueName()}_wake", out var existing))
+                {
+                    existing.Set();
+                    existing.Dispose();
+                }
+                Exit();
+                return;
+            }
+
+            // Create the wake event for this instance to listen on
+            _wakeEvent = new EventWaitHandle(false, EventResetMode.AutoReset, $"{GetUniqueName()}_wake");
+            _ = Task.Run(() =>
+            {
+                while (_wakeEvent.WaitOne())
+                {
+                    MainWindow.Instance?.DispatcherQueue.TryEnqueue(() => BringToFront(MainWindow.Instance));
+                }
+            });
+
+            // Constructing MainWindow is what kicks off InitializeComponent and the rest of the
+            // startup work. The delay before Activate() gives XAML time to finish building the
+            // tree, so the window doesn't flash a black background or show a splash whose image
+            // hasn't loaded yet.
+            _window = new MainWindow();
+            await Task.Delay(175);
+            _window.Activate();
+        }
+        catch (Exception ex)
+        {
+            // Anything that escapes here means the app never became usable. The UnhandledException
+            // hook can't see it (this is async void, past the first await), so record it directly
+            // — otherwise a startup crash is the one crash that leaves no report behind.
+            WriteCrashLog("OnLaunched", ex.Message, ex.ToString());
+            throw;
+        }
+    }
+
+    private static void BringToFront(Window? window)
+    {
+        if (window == null) return;
+
+        try
+        {
+            var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+            if (hWnd == IntPtr.Zero) return;
+
+            if (IsIconic(hWnd))
+                ShowWindow(hWnd, SW_RESTORE);
+
+            SetForegroundWindow(hWnd);
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine($"[App] Couldn't bring the existing window to front: {ex.Message}");
+        }
+    }
+
+    /// <summary>
     /// Dropped next to the app's local data and surfaced by MainWindow on the next launch,
     /// so a crash the user hit yesterday is still reportable today.
     /// </summary>
@@ -78,42 +152,7 @@ public partial class App : Application
         catch { /* if even this fails there's nothing left to do */ }
     }
 
-    public static Windows.ApplicationModel.PackageVersion GetPackageVersion()
-    {
-        try
-        {
-            return Windows.ApplicationModel.Package.Current.Id.Version;
-        }
-        catch
-        {
-            return default;
-        }
-    }
-
-    /// <summary>
-    /// Invoked when the application is launched.
-    /// </summary>
-    /// <param name="args">Details about the launch request and process.</param>
-    protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
-    {
-        bool isNewInstance;
-        _mutex = new Mutex(true, $"{GetUniqueFolderName()}", out isNewInstance);
-
-        if (!isNewInstance)
-        {
-            BringExistingWindowToFront();
-
-            // then xit without creating any new windows
-            Exit();
-            return;
-        }
-
-        // Continue with app initialization only if this is a new instance
-        _window = new MainWindow();
-        _window.Activate();
-    }
-
-    public static string GetUniqueFolderName()
+    public static string GetUniqueName()
     {
         try
         {
@@ -130,33 +169,33 @@ public partial class App : Application
         }
     }
 
+    public static Windows.ApplicationModel.PackageVersion GetPackageVersion()
+    {
+        try
+        {
+            return Windows.ApplicationModel.Package.Current.Id.Version;
+        }
+        catch
+        {
+            Trace.WriteLine("[GetPackageVersion] Failed.");
+            return new Windows.ApplicationModel.PackageVersion { Major = 0, Minor = 0, Build = 0, Revision = 0 };
+        }
+    }
+
     // Clean up mutex when app exits
     ~App()
     {
-        _mutex?.ReleaseMutex();
-        _mutex?.Dispose();
+        CleanupMutex();
     }
 
     public static void CleanupMutex()
     {
-        _mutex?.ReleaseMutex();
+        try { _mutex?.ReleaseMutex(); } catch { /* not owned / already released */ }
         _mutex?.Dispose();
-    }
+        _mutex = null;
 
-    private void BringExistingWindowToFront()
-    {
-        // Find the existing window process
-        var processes = System.Diagnostics.Process.GetProcessesByName("Texture Set Manager");
-        foreach (var process in processes)
-        {
-            if (process.Id != Environment.ProcessId)
-            {
-                // Bring the existing window to foreground
-                ShowWindow(process.MainWindowHandle, SW_RESTORE);
-                SetForegroundWindow(process.MainWindowHandle);
-                break;
-            }
-        }
+        _wakeEvent?.Dispose();
+        _wakeEvent = null;
     }
 
     // Windows API
@@ -165,6 +204,9 @@ public partial class App : Application
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool IsIconic(IntPtr hWnd);
 
     private const int SW_RESTORE = 9;
 }
@@ -177,19 +219,20 @@ public class InMemoryTraceListener : TraceListener
 {
     private readonly ConcurrentQueue<TraceEntry> _entries = new();
     private readonly int _maxEntries;
+    private int _count;
 
     public InMemoryTraceListener(int maxEntries = 1000)
     {
         _maxEntries = maxEntries;
     }
 
-    public override void Write(string message)
+    public override void Write(string? message)
     {
         // Usually not used, but implement for completeness
         WriteLine(message);
     }
 
-    public override void WriteLine(string message)
+    public override void WriteLine(string? message)
     {
         var entry = new TraceEntry
         {
@@ -200,10 +243,13 @@ public class InMemoryTraceListener : TraceListener
 
         _entries.Enqueue(entry);
 
-        // Keep buffer size under control
-        while (_entries.Count > _maxEntries)
+        // Interlocked counter rather than ConcurrentQueue.Count: that property walks the whole
+        // queue, so trimming a 25,000-entry buffer on every single trace line was quietly O(n)
+        // per write on whatever thread happened to be logging.
+        if (Interlocked.Increment(ref _count) > _maxEntries)
         {
-            _entries.TryDequeue(out _);
+            if (_entries.TryDequeue(out _))
+                Interlocked.Decrement(ref _count);
         }
     }
 
@@ -223,15 +269,17 @@ public class InMemoryTraceListener : TraceListener
     public void Clear()
     {
         while (_entries.TryDequeue(out _)) { }
+        Interlocked.Exchange(ref _count, 0);
     }
 
     private class TraceEntry
     {
         public DateTime Timestamp { get; set; }
-        public string Message { get; set; }
+        public string? Message { get; set; }
         public int ThreadId { get; set; }
     }
 }
+
 public static class TraceManager
 {
     private static InMemoryTraceListener? _listener;

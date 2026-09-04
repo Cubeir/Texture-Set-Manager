@@ -8,8 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Windows.Storage;
 using Windows.Storage.Pickers;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
 using static Texture_Set_Manager.EnvironmentVariables;
 
 namespace Texture_Set_Manager.Modules;
@@ -298,39 +297,24 @@ public static class Generate
 
                     Trace.WriteLine($"Processing: {colorTexturePath}");
 
-                    // Build texture set JSON
-                    var textureSetObj = new JObject();
-                    textureSetObj["format_version"] = "1.21.30";
-
-                    var minecraftTextureSet = new JObject();
-                    minecraftTextureSet["color"] = fileNameWithoutExt;
-
-                    // Add MER or MERS
-                    if (Persistent.enableSSS)
+                    // Build texture set JSON. Layers left null are omitted entirely by the model,
+                    // so "none" simply means no secondary map key is written.
+                    var textureSet = new TextureSetDocument
                     {
-                        minecraftTextureSet["metalness_emissive_roughness_subsurface"] = fileNameWithoutExt + "_mers";
-                    }
-                    else
-                    {
-                        minecraftTextureSet["metalness_emissive_roughness"] = fileNameWithoutExt + "_mer";
-                    }
+                        TextureSet = new TextureSetLayers
+                        {
+                            Color = fileNameWithoutExt,
+                            MetalnessEmissiveRoughness = Persistent.enableSSS ? null : fileNameWithoutExt + "_mer",
+                            MetalnessEmissiveRoughnessSubsurface = Persistent.enableSSS ? fileNameWithoutExt + "_mers" : null,
+                            Normal = Persistent.SecondaryPBRMapType == "normalmap" ? fileNameWithoutExt + "_normal" : null,
+                            Heightmap = Persistent.SecondaryPBRMapType == "heightmap" ? fileNameWithoutExt + "_heightmap" : null,
+                        }
+                    };
 
-                    // Add secondary PBR map (normal or heightmap)
-                    if (Persistent.SecondaryPBRMapType == "normalmap")
-                    {
-                        minecraftTextureSet["normal"] = fileNameWithoutExt + "_normal";
-                    }
-                    else if (Persistent.SecondaryPBRMapType == "heightmap")
-                    {
-                        minecraftTextureSet["heightmap"] = fileNameWithoutExt + "_heightmap";
-                    }
-                    // If "none", we don't add any secondary map
-
-                    textureSetObj["minecraft:texture_set"] = minecraftTextureSet;
-
-                    // Write JSON file
+                    // Write JSON file — through the source-generated context, so trimmed release
+                    // builds don't need reflection metadata that isn't there.
                     string jsonPath = Path.Combine(outputDirectory, fileNameWithoutExt + ".texture_set.json");
-                    string jsonContent = JsonConvert.SerializeObject(textureSetObj, Formatting.Indented);
+                    string jsonContent = JsonSerializer.Serialize(textureSet, TextureSetJsonContext.Default.TextureSetDocument);
                     File.WriteAllText(jsonPath, jsonContent);
                     Trace.WriteLine($"Created: {jsonPath}");
 

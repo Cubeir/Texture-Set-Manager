@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -206,7 +206,8 @@ public sealed partial class MainWindow : Window
                 _rootElement = null;
             }
         });
-        Safely(() => IncludeSubsurfaceScatteringToggle.IsEnabledChanged -= SSSToggle_IsEnabledChanged);
+        Safely(() => IncludeSubsurfaceScatteringToggle.IsEnabledChanged -= BevelOwner_IsEnabledChanged);
+        Safely(() => SecondaryPBRMapDropDown.IsEnabledChanged -= BevelOwner_IsEnabledChanged);
 
         Safely(() => this.Activated -= MainWindow_ActivationChanged);
         Safely(() => this.Closed -= MainWindow_Closed);
@@ -231,7 +232,7 @@ public sealed partial class MainWindow : Window
         ChatButton.Opacity = opacity;
         DonateButton.Opacity = opacity;
         CycleThemeButton.Opacity = opacity;
-        AnalyzeTextureSetsButton.Opacity = opacity;
+        TextureSetToolsButton.Opacity = opacity;
     }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -257,7 +258,8 @@ public sealed partial class MainWindow : Window
                 ThemeService.ApplyTitleBarColors(this.AppWindow, root.ActualTheme);
                 ApplySSSBevelColors(root.ActualTheme);
 
-                IncludeSubsurfaceScatteringToggle.IsEnabledChanged += SSSToggle_IsEnabledChanged;
+                IncludeSubsurfaceScatteringToggle.IsEnabledChanged += BevelOwner_IsEnabledChanged;
+                SecondaryPBRMapDropDown.IsEnabledChanged += BevelOwner_IsEnabledChanged;
                 root.ActualThemeChanged += Root_ActualThemeChanged;
             }
 
@@ -325,25 +327,28 @@ public sealed partial class MainWindow : Window
         ThemeService.Broadcast(sender.ActualTheme);
     }
 
-    private void SSSToggle_IsEnabledChanged(object sender, DependencyPropertyChangedEventArgs e)
+    private void BevelOwner_IsEnabledChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (_isClosing || _rootElement == null) return;
         ApplySSSBevelColors(_rootElement.ActualTheme);
     }
 
     /// <summary>
-    /// The two bevelled edges flanking the Subsurface Scattering button. They accent when it's
-    /// checked, fall back to the resting bevel when it isn't, dim when the button is disabled
-    /// (e.g. while a generation run has the UI locked), and follow the theme in every case.
+    /// The two halves of the bevelled seam between the secondary-PBR dropdown and the Subsurface
+    /// Scattering button. Each half belongs to the button it touches: only the SSS side takes the
+    /// accent when the toggle is checked, because the dropdown has no accented state to represent
+    /// and tinting its edge would read as if the dropdown itself were active. Both still dim when
+    /// their own button is disabled and both follow the theme.
     /// </summary>
     private void ApplySSSBevelColors(ElementTheme theme)
     {
-        var isEnabled = IncludeSubsurfaceScatteringToggle.IsEnabled;
-
         LeftEdgeOfSSSButton.BorderBrush = new SolidColorBrush(
-            ThemeService.GetBevelColor(theme, ThemeService.BevelEdge.Left, accented: enableSSS, isEnabled: isEnabled));
-        DarkEdgeOfSSSButton.BorderBrush = new SolidColorBrush(
-            ThemeService.GetBevelColor(theme, ThemeService.BevelEdge.Right, accented: enableSSS, isEnabled: isEnabled));
+            ThemeService.GetBevelColor(theme, ThemeService.BevelEdge.Left,
+                accented: enableSSS, isEnabled: IncludeSubsurfaceScatteringToggle.IsEnabled));
+
+        RightEdgeOfSecondaryPBRDropDown.BorderBrush = new SolidColorBrush(
+            ThemeService.GetBevelColor(theme, ThemeService.BevelEdge.Right,
+                accented: false, isEnabled: SecondaryPBRMapDropDown.IsEnabled));
     }
 
 
@@ -390,93 +395,22 @@ public sealed partial class MainWindow : Window
             var content = File.ReadAllText(logPath);
             File.Delete(logPath);
 
-            var copyButton = new Button
-            {
-                Content = "Copy Crash Logs",
-                HorizontalAlignment = HorizontalAlignment.Stretch
-            };
-
-            var githubLink = new HyperlinkButton
-            {
-                Content = "Create an issue on GitHub",
-                NavigateUri = new Uri("https://github.com/Cubeir/Texture-Set-Manager/issues"),
-                Margin = new Thickness(0, 2, 0, 0),
-                Padding = new Thickness(4, 4, 4, 4)
-            };
-
-            var discordLink = new HyperlinkButton
-            {
-                Content = "Create a post on the Vanilla RTX Discord Server",
-                NavigateUri = new Uri("https://discord.gg/A4wv4wwYud"),
-                Padding = new Thickness(4, 4, 4, 4)
-            };
-
-            var logBox = new ScrollViewer
-            {
-                Content = new TextBlock
+            await ReportDialog.ShowAsync(
+                Content.XamlRoot,
+                ((FrameworkElement)Content).ActualTheme,
+                title: "Previous Session Crash Report",
+                intro: "Oh no! Looks like a crash occurred during the previous session. You may continue to use the app, "
+                     + "but it would be better if you report it to the developer to see it patched up soon!",
+                body: content,
+                copyButtonText: "Copy Crash Logs",
+                closeButtonText: "Continue Using the App (dismisses the report)",
+                linksHeader: "Report using one of the following methods:",
+                links: new[]
                 {
-                    Text = content,
-                    FontFamily = new FontFamily("Consolas"),
-                    FontSize = 11,
-                    IsTextSelectionEnabled = true,
-                    TextWrapping = TextWrapping.Wrap
+                    new ReportDialog.Link("Create an issue on GitHub", "https://github.com/Cubeir/Texture-Set-Manager/issues"),
+                    new ReportDialog.Link("Create a post on the Vanilla RTX Discord Server", "https://discord.gg/A4wv4wwYud"),
                 },
-                MaxHeight = 200,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto
-            };
-
-            var dismissButton = new Button
-            {
-                Content = "Continue Using the App (dismisses the report)",
-                HorizontalAlignment = HorizontalAlignment.Stretch
-            };
-
-            var panel = new StackPanel { Spacing = 12 };
-
-            panel.Children.Add(new TextBlock
-            {
-                Text = "Oh no! Looks like a crash occurred during the previous session, you may continue to use the app, but it would be better if you report it to the developer to see it patched up soon!",
-                TextWrapping = TextWrapping.Wrap
-            });
-
-            var linksPanel = new StackPanel { Spacing = 2 };
-            linksPanel.Children.Add(new TextBlock { Text = "Report using one of the following methods:" });
-            linksPanel.Children.Add(githubLink);
-            linksPanel.Children.Add(discordLink);
-            panel.Children.Add(linksPanel);
-
-            panel.Children.Add(new TextBlock
-            {
-                Text = "Crash details:",
-                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
-            });
-            panel.Children.Add(logBox);
-            panel.Children.Add(copyButton);
-            panel.Children.Add(dismissButton);
-
-            var dialog = new ContentDialog
-            {
-                Title = "Previous Session Crash Report",
-                Content = panel,
-                XamlRoot = this.Content.XamlRoot,
-                RequestedTheme = ((FrameworkElement)this.Content).ActualTheme
-            };
-
-            copyButton.Click += async (s, e) =>
-            {
-                var dataPackage = new DataPackage();
-                dataPackage.SetText(content);
-                Clipboard.SetContent(dataPackage);
-
-                copyButton.Content = "Copied!";
-                await Task.Delay(1500);
-                copyButton.Content = "Copy Crash Logs";
-            };
-
-            dismissButton.Click += (s, e) => dialog.Hide();
-
-            await dialog.ShowAsync();
+                bodyMaxHeight: 200);
         }
         catch { /* a failed crash report must never itself become a crash */ }
     }
@@ -976,39 +910,39 @@ public sealed partial class MainWindow : Window
 
 
     /// <summary>
-    /// Picks a folder and reports every PBR texture in it that's still a byte-for-byte copy of
-    /// its own color texture — i.e. the templates nobody ever got around to painting.
+    /// Shared folder picker for the texture set tools. Returns null when the user backs out.
     /// </summary>
-    private async void AnalyzeTextureSetsButton_Click(object sender, RoutedEventArgs e)
+    private async Task<string?> PickFolderAsync(string commitText)
     {
-        if (sender is not Button button) return;
-
-        string folder;
         try
         {
-            button.IsEnabled = false;
-
-            var picker = new Microsoft.Windows.Storage.Pickers.FolderPicker(button.XamlRoot.ContentIslandEnvironment.AppWindowId)
+            var picker = new Microsoft.Windows.Storage.Pickers.FolderPicker(Content.XamlRoot.ContentIslandEnvironment.AppWindowId)
             {
-                CommitButtonText = "Inspect this folder",
+                CommitButtonText = commitText,
                 SuggestedStartLocation = (Microsoft.Windows.Storage.Pickers.PickerLocationId)PickerLocationId.Desktop,
                 ViewMode = (Microsoft.Windows.Storage.Pickers.PickerViewMode)PickerViewMode.Thumbnail,
             };
 
             var picked = await picker.PickSingleFolderAsync();
-            if (picked == null) return;
-
-            folder = picked.Path;
+            return picked?.Path;
         }
         catch (Exception ex)
         {
             Trace.WriteLine(ex);
-            return;
+            return null;
         }
-        finally
-        {
-            button.IsEnabled = true;
-        }
+    }
+
+
+    /// <summary>
+    /// Picks a folder and reports every PBR texture in it that's still a byte-for-byte copy of
+    /// its own color texture — i.e. the templates nobody ever got around to painting. Read-only:
+    /// this never touches a file.
+    /// </summary>
+    private async void AnalyzeTextureSetsMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var folder = await PickFolderAsync("Inspect this folder");
+        if (folder == null) return;
 
         try
         {
@@ -1031,8 +965,23 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
-            var level = report.FlaggedSets.Any() ? LogLevel.Warning : LogLevel.Success;
-            Log(TextureSetAnalyzer.BuildLogReport(report), level);
+            var flagged = report.FlaggedSets.Any();
+            var summary = TextureSetAnalyzer.BuildLogReport(report);
+
+            // Log it for the record, then put it in front of the user — a report they're meant
+            // to act on is far too easy to scroll past in the sidebar.
+            Log(summary, flagged ? LogLevel.Warning : LogLevel.Success);
+
+            await ReportDialog.ShowAsync(
+                Content.XamlRoot,
+                ((FrameworkElement)Content).ActualTheme,
+                title: "Texture Set Report",
+                intro: flagged
+                    ? "Some PBR textures are still identical to their color texture. Those are almost always template "
+                    + "copies that were never painted — worth going back to, or removing from the pack."
+                    : "Nothing looks left over from a template. Here's the full result:",
+                body: summary,
+                copyButtonText: "Copy Report");
         }
         catch (OperationCanceledException)
         {
@@ -1049,6 +998,68 @@ public sealed partial class MainWindow : Window
         }
     }
 
+
+    /// <summary>
+    /// Picks a folder and deletes every texture set in it along with the PBR textures those sets
+    /// reference, leaving the color textures alone.
+    ///
+    /// This is destructive and there is no undo, so the scope prompt is deliberately mandatory:
+    /// it names the folder, and Cancel is its default button. That prompt is the confirmation —
+    /// there is no path from clicking the menu item to deleting a file without answering it.
+    /// </summary>
+    private async void StripTextureSetsMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var folder = await PickFolderAsync("Strip this folder");
+        if (folder == null) return;
+
+        var scope = await ReportDialog.AskScopeAsync(
+            Content.XamlRoot,
+            ((FrameworkElement)Content).ActualTheme,
+            title: "Strip all texture sets?",
+            message: $"Every .texture_set.json in:\n\n{folder}\n\n"
+                   + "will be deleted, along with the MER/MERS, normal and heightmap textures they reference. "
+                   + "Color textures are never touched.\n\n"
+                   + "This cannot be undone. How far should it reach?");
+
+        if (scope == ReportDialog.ScopeChoice.Cancelled)
+        {
+            Log("Texture set stripping cancelled.", LogLevel.Informational);
+            return;
+        }
+
+        var searchOption = scope == ReportDialog.ScopeChoice.IncludeSubfolders
+            ? SearchOption.AllDirectories
+            : SearchOption.TopDirectoryOnly;
+
+        try
+        {
+            ToggleControls(this, false);
+            Log($"Stripping texture sets from {folder} ({(searchOption == SearchOption.AllDirectories ? "including subfolders" : "this folder only")})...", LogLevel.Lengthy);
+
+            var result = await Task.Run(() => PbrStripper.Strip(folder, searchOption));
+
+            if (result.TextureSetsDeleted == 0 && result.TexturesDeleted == 0)
+            {
+                Log("Nothing to strip — no texture sets were found in that scope.", LogLevel.Informational);
+                return;
+            }
+
+            var message = $"Removed {result.TextureSetsDeleted} texture set(s) and {result.TexturesDeleted} PBR texture(s). Color textures were left untouched.";
+            if (result.Failed > 0)
+                message += $" {result.Failed} file(s) could not be deleted — they may be open in another program.";
+
+            Log(message, result.Failed > 0 ? LogLevel.Warning : LogLevel.Success);
+        }
+        catch (Exception ex)
+        {
+            Log($"Error while stripping texture sets: {ex.Message}", LogLevel.Error);
+            Trace.WriteLine(ex);
+        }
+        finally
+        {
+            ToggleControls(this, true);
+        }
+    }
 
 
     private void LogCopyButton_Click(object sender, RoutedEventArgs e)
