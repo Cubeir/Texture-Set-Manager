@@ -1,11 +1,13 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using WinUIEx;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -114,13 +116,13 @@ public partial class App : Application
 
         try
         {
-            var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
-            if (hWnd == IntPtr.Zero) return;
+            // Restore() un-maximizes as well as un-minimizes, so only call it when the window
+            // actually is minimized - otherwise re-launching the app would quietly shrink a
+            // maximized window back down.
+            if (window.AppWindow?.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized })
+                window.Restore();
 
-            if (IsIconic(hWnd))
-                ShowWindow(hWnd, SW_RESTORE);
-
-            SetForegroundWindow(hWnd);
+            window.SetForegroundWindow();
         }
         catch (Exception ex)
         {
@@ -197,18 +199,6 @@ public partial class App : Application
         _wakeEvent?.Dispose();
         _wakeEvent = null;
     }
-
-    // Windows API
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool IsIconic(IntPtr hWnd);
-
-    private const int SW_RESTORE = 9;
 }
 
 

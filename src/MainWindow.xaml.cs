@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -23,6 +23,7 @@ using Windows.ApplicationModel.DataTransfer;
 using Windows.Graphics;
 using Windows.Storage;
 using Windows.Storage.Pickers;
+using WinUIEx;
 using static Texture_Set_Manager.Core.WindowControlsManager;
 using static Texture_Set_Manager.EnvironmentVariables;
 using static Texture_Set_Manager.EnvironmentVariables.Persistent;
@@ -119,8 +120,6 @@ public sealed partial class MainWindow : Window
 {
     public static MainWindow? Instance { get; private set; }
 
-    private readonly WindowStateManager _windowStateManager;
-
     // Everything that keeps running after the window is gone has to be told to stop, and
     // every handler hung off the content tree has to be unhooked – leaving a theme listener
     // (or a DispatcherTimer) alive past Closed is exactly what used to spit a crash minidump
@@ -128,9 +127,6 @@ public sealed partial class MainWindow : Window
     private bool _isClosing = false;
     private FrameworkElement? _rootElement;
     private CancellationTokenSource? _analysisCts;
-
-    [DllImport("user32.dll")]
-    public static extern uint GetDpiForWindow(IntPtr hWnd);
 
 
     // ---------------------------------------| | | | | | | | | | |-------------------------------------------- \\
@@ -152,11 +148,7 @@ public sealed partial class MainWindow : Window
             SplashOverlay.Visibility = Visibility.Visible;
         }
 
-        _windowStateManager = new WindowStateManager(this, false, msg => Log(msg));
-
         Instance = this;
-
-        _windowStateManager.ApplySavedStateOrDefaults();
 
         Log($"Version: {appVersion}");
 
@@ -208,8 +200,6 @@ public sealed partial class MainWindow : Window
 
         Safely(() => this.Activated -= MainWindow_ActivationChanged);
         Safely(() => this.Closed -= MainWindow_Closed);
-
-        Safely(() => _windowStateManager?.Dispose());
 
         Safely(App.CleanupMutex);
 
@@ -355,25 +345,36 @@ public sealed partial class MainWindow : Window
         ExtendsContentIntoTitleBar = true;
         this.AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
 
-        var hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hWnd);
-        var appWindow = AppWindow.GetFromWindowId(windowId);
-        appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+        // WinUIEx owns sizing, minimum size and position persistence now. Setting PersistenceId
+        // is the whole of the save/restore story: it writes to its own "WinUIEx" LocalSettings
+        // container on close and reapplies on launch, including clamping a restored position back
+        // onto a monitor that still exists. Its Width/Height are DIPs and it scales them
+        // internally, so none of the DPI arithmetic the old manager carried is needed.
+        var manager = WindowManager.Get(this);
+        manager.PersistenceId = "MainWindow";
+        manager.Width = WindowSizeX;
+        manager.Height = WindowSizeY;
+        manager.MinWidth = WindowMinSizeX;
+        manager.MinHeight = WindowMinSizeY;
+        manager.IsResizable = true;
+        manager.IsMaximizable = true;
 
-        if (appWindow.Presenter is OverlappedPresenter presenter)
+        // First launch (or first launch after this migration) has nothing saved yet - WinUIEx
+        // only creates its settings container once it has a position to store, so its absence is
+        // the signal to centre rather than let Windows place the window wherever it likes.
+        var settings = ApplicationData.Current.LocalSettings;
+        if (!settings.Containers.ContainsKey("WinUIEx"))
         {
-            presenter.IsResizable = true;
-            presenter.IsMaximizable = true;
+            this.CenterOnScreen();
 
-            var dpi = GetDpiForWindow(hWnd);
-            var scaleFactor = dpi / 96.0;
-            presenter.PreferredMinimumWidth = (int)(WindowMinSizeX * scaleFactor);
-            presenter.PreferredMinimumHeight = (int)(WindowMinSizeY * scaleFactor);
+            // The hand-rolled window state manager this replaced wrote its own four top-level
+            // keys. Nothing reads them any more, so sweep them out on the way past rather than
+            // leaving dead entries in every existing user's settings forever.
+            foreach (var staleKey in new[] { "WindowX", "WindowY", "WindowWidth", "WindowHeight" })
+                settings.Values.Remove(staleKey);
         }
 
-        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "icon.ico");
-        appWindow.SetTaskbarIcon(iconPath);
-        appWindow.SetTitleBarIcon(iconPath);
+        this.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "icon.ico"));
 
         // Titlebar colors are applied (and kept in sync) from MainWindow_Loaded, where there's
         // a content tree to hang a properly-unsubscribed listener off of.
