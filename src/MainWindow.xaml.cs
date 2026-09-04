@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -1117,7 +1117,7 @@ public sealed partial class MainWindow : Window
             var dataPackage = new DataPackage();
             dataPackage.SetText(sb.ToString());
             Clipboard.SetContent(dataPackage);
-            Log("Copied debug logs to clipboard.", LogLevel.Success);
+            Log("Copied logs to clipboard.", LogLevel.Success);
         }
         catch (Exception ex)
         {
