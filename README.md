@@ -25,7 +25,6 @@ Feature-rich automation tool for Minecraft Bedrock Edition resource pack authors
 
 # Overview
 
-## Overview
 - Select a folder and any number of individual files to be processed together (supports drag-and-drop).
 > Use the clear button to clear selections, selections are also cleared after each generation attempt.
 - Enable or disable Subsurface Scattering property.
