@@ -29,9 +29,6 @@ using static Texture_Set_Manager.EnvironmentVariables.Persistent;
 
 namespace Texture_Set_Manager;
 
-// In the hindsight it would've been a good idea to link the official doc in the app 🤣
-// redo the render with an actual 3d gear instead of the flat thing, and with higer res window sshot, that one is fugly
-
 public static class EnvironmentVariables
 {
     private static readonly Windows.ApplicationModel.PackageVersion _version = App.GetPackageVersion();
@@ -74,10 +71,10 @@ public static class EnvironmentVariables
     }
 
     // Set Window size default for all windows
-    public const int WindowSizeX = 720;
-    public const int WindowSizeY = 480;
-    public const int WindowMinSizeX = 720;
-    public const int WindowMinSizeY = 480;
+    public const int WindowSizeX = 750;
+    public const int WindowSizeY = 500;
+    public const int WindowMinSizeX = 640;
+    public const int WindowMinSizeY = 400;
 
     // Saves persistent variables
     public static void SaveSettings()
