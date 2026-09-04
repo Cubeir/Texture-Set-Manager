@@ -10,7 +10,7 @@
   <Identity
     Name="Cubeir.TextureSetManager"
     Publisher="CN=7F2D29F8-D1F9-46A7-9DFB-595D98E11214"
-    Version="1.0.0.0" />
+    Version="2.0.0.0" />
 
   <mp:PhoneIdentity PhoneProductId="14d771a9-af30-450d-a688-01bb3e8bc3bc" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
@@ -35,7 +35,7 @@
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
         DisplayName="Texture Set Manager"
-        Description="Feature-rich automation tool for Minecraft resource pack authors to generate RTX and Vibrant Visuals texture sets."
+        Description="Feature-rich automation tool for Minecraft Bedrock resource pack authors to manage PBR texture sets for RTX and Vibrant Visuals."
         BackgroundColor="transparent"
         Square150x150Logo="Assets\icons\Square150x150Logo.png"
         Square44x44Logo="Assets\icons\Square44x44Logo.png">

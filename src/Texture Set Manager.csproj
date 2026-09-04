@@ -1193,6 +1193,7 @@
 
   <!-- Publish Properties -->
   <PropertyGroup>
+      <VersionPrefix>2.0.0.0</VersionPrefix>  <!-- SET ASSEMBLY VERSION HERE -->
     <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
     <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
     <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
@@ -1229,6 +1230,8 @@
     <GenerateTemporaryStoreCertificate>True</GenerateTemporaryStoreCertificate>
     <DefaultLanguage>en-US</DefaultLanguage>
     <PackageTags>minecraft, texture set, pbr</PackageTags>
+    <AssemblyVersion>$(VersionPrefix)</AssemblyVersion>
+    <FileVersion>$(VersionPrefix)</FileVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x86'">
     <DebugType>none</DebugType>
