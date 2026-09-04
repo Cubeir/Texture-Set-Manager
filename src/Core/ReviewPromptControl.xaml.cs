@@ -1,4 +1,5 @@
-using System;
+﻿using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -78,13 +79,34 @@ public sealed partial class ReviewPromptControl : UserControl
 public static class ReviewPromptManager
 {
     private const string FIRST_LAUNCH_KEY = "ReviewPromptFirstLaunchTime";
-    private const string DONT_SHOW_KEY = "ReviewPromptDontShowReviewPrompt";
+    // Keyed by version so "don't show again" lapses on a Major or Minor update (not on new
+    // builds/revisions) — a user who dismissed the prompt two feature releases ago is a
+    // reasonable person to ask once more.
+    private static readonly string DONT_SHOW_KEY = $"ReviewPromptDontShow_{EnvironmentVariables.appVersionMajorMinor}";
     private const string LAST_PROMPT_KEY = "ReviewPromptLastPromptTime";
     private const double MINUTES_BEFORE_PROMPT = 2440; // how many hours to wait before showing for the first time, or showing again
     private const int SHOW_DELAY_SECONDS = 1; // delay to show it after being called
 
     private static ReviewPromptControl? _currentPrompt;
     private static Panel? _rootPanel;
+
+    /// <summary>Drops the per-version "don't show" keys left behind by older versions.</summary>
+    private static void CleanupOldVersionKeys()
+    {
+        try
+        {
+            var localSettings = ApplicationData.Current.LocalSettings;
+            var keysToRemove = localSettings.Values.Keys
+                .Where(k => k.StartsWith("ReviewPromptDontShow") && k != DONT_SHOW_KEY)
+                .ToList();
+            foreach (var key in keysToRemove)
+                localSettings.Values.Remove(key);
+        }
+        catch
+        {
+            System.Diagnostics.Trace.WriteLine("[ReviewPrompt] Failed to clear orphaned ReviewPromptDontShow keys");
+        }
+    }
 
     /// <summary>
     /// Initialize and show the review prompt if conditions are met.
@@ -103,6 +125,8 @@ public static class ReviewPromptManager
         }
 
         System.Diagnostics.Trace.WriteLine($"Root panel type: {_rootPanel.GetType().Name}");
+
+        CleanupOldVersionKeys();
 
         // Record first launch if not already recorded
         await RecordFirstLaunchIfNeededAsync();

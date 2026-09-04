@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -179,67 +179,30 @@ public static class Generate
 
                 Trace.WriteLine($"Files after suffix filtering: {filesList.Count}");
 
-                // Part 2: Parse existing texture set JSONs and exclude referenced textures
+                // Part 2: Resolve existing texture sets and exclude every texture they already reference.
+                // TextureSetHelper does the parsing/validation (and understands inline colour layers,
+                // MER-vs-MERS and normal-vs-heightmap exclusivity), so this only has to collect paths.
                 if (hasFolder && Directory.Exists(selectedFolder))
                 {
                     SearchOption searchOption = Persistent.ProcessSubfolders
                         ? SearchOption.AllDirectories
                         : SearchOption.TopDirectoryOnly;
 
-                    var textureSetJsons = Directory.GetFiles(selectedFolder, "*.texture_set.json", searchOption);
-                    Trace.WriteLine($"Found {textureSetJsons.Length} existing texture set JSONs");
+                    var resolvedSets = TextureSetHelper.ResolveTextureSets(selectedFolder, searchOption);
+                    Trace.WriteLine($"Resolved {resolvedSets.Count} existing texture set(s)");
 
                     var referencedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-                    foreach (var jsonFile in textureSetJsons)
+                    foreach (var set in resolvedSets)
                     {
-                        try
+                        foreach (var layer in new[] { set.Color, set.Mer, set.NormalOrHeight })
                         {
-                            string jsonText = File.ReadAllText(jsonFile);
-                            var root = JObject.Parse(jsonText);
+                            // Inline colour layers have no file on disk to exclude
+                            if (layer is null || layer.IsInline || string.IsNullOrEmpty(layer.FilePath))
+                                continue;
 
-                            if (root.SelectToken("minecraft:texture_set") is JObject textureSet)
-                            {
-                                string jsonDir = Path.GetDirectoryName(jsonFile);
-
-                                // Extract all texture references
-                                var textureNames = new List<string>();
-
-                                if (textureSet.Value<string>("color") is string color)
-                                    textureNames.Add(color);
-
-                                if (textureSet.Value<string>("metalness_emissive_roughness") is string mer)
-                                    textureNames.Add(mer);
-
-                                if (textureSet.Value<string>("metalness_emissive_roughness_subsurface") is string mers)
-                                    textureNames.Add(mers);
-
-                                if (textureSet.Value<string>("normal") is string normal)
-                                    textureNames.Add(normal);
-
-                                if (textureSet.Value<string>("heightmap") is string heightmap)
-                                    textureNames.Add(heightmap);
-
-                                // For each texture name, check all possible extensions
-                                foreach (var textureName in textureNames)
-                                {
-                                    foreach (var ext in supportedFileExtensions)
-                                    {
-                                        string texturePath = Path.Combine(jsonDir, textureName + ext);
-
-                                        // Case-insensitive file existence check
-                                        if (FileExistsCaseInsensitive(texturePath))
-                                        {
-                                            referencedFiles.Add(texturePath);
-                                            Trace.WriteLine($"Texture set references: {texturePath}");
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Trace.WriteLine($"Failed to parse {jsonFile}: {ex.Message}");
+                            referencedFiles.Add(layer.FilePath!);
+                            Trace.WriteLine($"Texture set references: {layer.FilePath}");
                         }
                     }
 
@@ -268,42 +231,23 @@ public static class Generate
             // ============================================
             // PHASE 4.5: Convert to TGA (if enabled, before template generation)
             // ============================================
+            // Intent: "Convert to TGA" governs the format the whole set ends up in. When it's on,
+            // a color texture that isn't already Targa is converted and the original is deleted,
+            // so the templates copied from it in Phase 5 come out as .tga too. Color textures that
+            // are already .tga are left byte-for-byte alone. When it's off, nothing is converted and
+            // the templates simply inherit whatever format the color texture already is.
             if (Persistent.ConvertToTarga)
             {
                 Trace.WriteLine("=== PHASE 4.5: Converting to TGA ===");
 
-                var filesArray = filesList.ToArray();
-                Helpers.ConvertImagesToTga(filesArray);
+                var converted = Helpers.ConvertImagesToTga(filesList);
 
-                // Update filesList with new .tga paths and delete old files
                 var newFilesList = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var file in filesArray)
+                foreach (var file in converted)
                 {
-                    string tgaPath = Path.ChangeExtension(file, ".tga");
-
-                    if (File.Exists(tgaPath))
-                    {
-                        newFilesList.Add(tgaPath);
-
-                        // Delete original file if it's not already a TGA
-                        if (!file.EndsWith(".tga", StringComparison.OrdinalIgnoreCase) && File.Exists(file))
-                        {
-                            try
-                            {
-                                File.Delete(file);
-                                Trace.WriteLine($"Deleted original: {file}");
-                            }
-                            catch (Exception ex)
-                            {
-                                Trace.WriteLine($"Warning: Could not delete {file}: {ex.Message}");
-                            }
-                        }
-                    }
-                    else if (File.Exists(file))
-                    {
-                        // Conversion may have failed for this file, keep original
-                        newFilesList.Add(file);
-                    }
+                    // ConvertImagesToTga hands back the original path when a conversion failed,
+                    // so a file that still exists is still worth generating a texture set for.
+                    if (File.Exists(file)) newFilesList.Add(file);
                 }
                 filesList = newFilesList;
 
@@ -314,21 +258,43 @@ public static class Generate
                 Trace.WriteLine("=== PHASE 4.5: TGA Conversion Skipped (disabled) ===");
             }
 
+            if (filesList.Count == 0)
+            {
+                return (false, "No files remained after format conversion.");
+            }
+
             // ============================================
             // PHASE 5: Generate Texture Set Templates
             // ============================================
             Trace.WriteLine("=== PHASE 5: Generating Texture Set Templates ===");
 
+            var outputFolderName = SecondaryPBRFolderName(Persistent.SecondaryPBRMapType);
+
             int successCount = 0;
             int failCount = 0;
+            var outputFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var colorTexturePath in filesList)
             {
                 try
                 {
-                    string directory = Path.GetDirectoryName(colorTexturePath);
+                    string sourceDirectory = Path.GetDirectoryName(colorTexturePath)!;
                     string fileNameWithoutExt = Path.GetFileNameWithoutExtension(colorTexturePath);
+                    // Templates are copies of the color texture, so they always carry its format.
+                    // With "Convert to TGA" on, that format is already .tga by this point.
                     string extension = Path.GetExtension(colorTexturePath);
+
+                    // "Create new folders" keeps the generated JSON + templates out of the artist's
+                    // source folder, collecting them per source folder in e.g. "Heightmaps-PBR".
+                    string outputDirectory = Persistent.CreateNewFolders
+                        ? Path.Combine(sourceDirectory, outputFolderName)
+                        : sourceDirectory;
+
+                    if (Persistent.CreateNewFolders && outputFolders.Add(outputDirectory))
+                    {
+                        Directory.CreateDirectory(outputDirectory);
+                        Trace.WriteLine($"Created output folder: {outputDirectory}");
+                    }
 
                     Trace.WriteLine($"Processing: {colorTexturePath}");
 
@@ -363,7 +329,7 @@ public static class Generate
                     textureSetObj["minecraft:texture_set"] = minecraftTextureSet;
 
                     // Write JSON file
-                    string jsonPath = Path.Combine(directory, fileNameWithoutExt + ".texture_set.json");
+                    string jsonPath = Path.Combine(outputDirectory, fileNameWithoutExt + ".texture_set.json");
                     string jsonContent = JsonConvert.SerializeObject(textureSetObj, Formatting.Indented);
                     File.WriteAllText(jsonPath, jsonContent);
                     Trace.WriteLine($"Created: {jsonPath}");
@@ -371,20 +337,20 @@ public static class Generate
                     // Copy color texture to create template files
                     // MER or MERS
                     string merSuffix = Persistent.enableSSS ? "_mers" : "_mer";
-                    string merPath = Path.Combine(directory, fileNameWithoutExt + merSuffix + extension);
+                    string merPath = Path.Combine(outputDirectory, fileNameWithoutExt + merSuffix + extension);
                     File.Copy(colorTexturePath, merPath, overwrite: true);
                     Trace.WriteLine($"Created template: {merPath}");
 
                     // Secondary PBR map
                     if (Persistent.SecondaryPBRMapType == "normalmap")
                     {
-                        string normalPath = Path.Combine(directory, fileNameWithoutExt + "_normal" + extension);
+                        string normalPath = Path.Combine(outputDirectory, fileNameWithoutExt + "_normal" + extension);
                         File.Copy(colorTexturePath, normalPath, overwrite: true);
                         Trace.WriteLine($"Created template: {normalPath}");
                     }
                     else if (Persistent.SecondaryPBRMapType == "heightmap")
                     {
-                        string heightmapPath = Path.Combine(directory, fileNameWithoutExt + "_heightmap" + extension);
+                        string heightmapPath = Path.Combine(outputDirectory, fileNameWithoutExt + "_heightmap" + extension);
                         File.Copy(colorTexturePath, heightmapPath, overwrite: true);
                         Trace.WriteLine($"Created template: {heightmapPath}");
                     }
@@ -402,9 +368,13 @@ public static class Generate
             Trace.WriteLine($"Success: {successCount}, Failed: {failCount}");
 
             // Return status
+            var folderNote = Persistent.CreateNewFolders && outputFolders.Count > 0
+                ? $" Placed in {outputFolders.Count} \"{outputFolderName}\" folder(s)."
+                : string.Empty;
+
             if (failCount == 0)
             {
-                return (true, $"Successfully generated {successCount} texture set template(s).");
+                return (true, $"Successfully generated {successCount} texture set template(s).{folderNote}");
             }
             else if (successCount == 0)
             {
@@ -412,7 +382,7 @@ public static class Generate
             }
             else
             {
-                return (true, $"Generated {successCount} texture set(s) with {failCount} failure(s).");
+                return (true, $"Generated {successCount} texture set(s) with {failCount} failure(s).{folderNote}");
             }
         }
         catch (Exception ex)
@@ -425,36 +395,23 @@ public static class Generate
     #region Helper Methods
 
     /// <summary>
+    /// Folder name used by the "Create new folders" option, named after the kind of
+    /// secondary PBR texture the run produced.
+    /// </summary>
+    public static string SecondaryPBRFolderName(string secondaryPBRMapType) => secondaryPBRMapType switch
+    {
+        "normalmap" => "Normals-PBR",
+        "heightmap" => "Heightmaps-PBR",
+        _ => "None-PBR"
+    };
+
+    /// <summary>
     /// Checks if a file has a supported image extension.
     /// </summary>
     private static bool IsSupportedExtension(string filePath)
     {
         string ext = Path.GetExtension(filePath).ToLowerInvariant();
         return supportedFileExtensions.Contains(ext);
-    }
-
-    /// <summary>
-    /// Case-insensitive file existence check.
-    /// </summary>
-    private static bool FileExistsCaseInsensitive(string filePath)
-    {
-        if (File.Exists(filePath))
-            return true;
-
-        try
-        {
-            string directory = Path.GetDirectoryName(filePath);
-            string fileName = Path.GetFileName(filePath);
-
-            if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
-                return false;
-
-            return Directory.GetFiles(directory, fileName, SearchOption.TopDirectoryOnly).Length > 0;
-        }
-        catch
-        {
-            return false;
-        }
     }
 
     /// <summary>

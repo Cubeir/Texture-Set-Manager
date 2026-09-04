@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.IO;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 
 // To learn more about WinUI, the WinUI project structure,
@@ -26,6 +28,66 @@ public partial class App : Application
         InitializeComponent();
 
         TraceManager.Initialize();
+
+        // 1. Catches unhandled exceptions on the UI thread from any window
+        this.UnhandledException += (s, e) =>
+        {
+            WriteCrashLog("UI Thread", $"[{e.Exception.GetType().FullName} / 0x{e.Exception.HResult:X8}] {e.Message}", e.Exception.ToString());
+            // intentionally not setting e.Handled = true
+            // let it crash naturally so WER still gets the dump
+        };
+
+        // 2. Catches exceptions escaping async void after an await,
+        // and anything thrown on the UI thread that XAML doesn't intercept
+        TaskScheduler.UnobservedTaskException += (s, e) =>
+        {
+            WriteCrashLog("Unobserved Task", e.Exception.Message, e.Exception.ToString());
+            e.SetObserved(); // prevents process termination for tasks, since we've logged it ourselves
+        };
+
+        // 3. Catches exceptions on background threads, Thread.Start, etc.
+        AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+        {
+            var ex = e.ExceptionObject as Exception;
+            WriteCrashLog("Background Thread", ex?.Message ?? "Unknown", ex?.ToString() ?? e.ExceptionObject?.ToString() ?? "No details");
+            // can't prevent termination here, but the log is written
+        };
+    }
+
+    /// <summary>
+    /// Dropped next to the app's local data and surfaced by MainWindow on the next launch,
+    /// so a crash the user hit yesterday is still reportable today.
+    /// </summary>
+    public static void WriteCrashLog(string source, string message, string detail)
+    {
+        try
+        {
+            var logPath = Path.Combine(
+                Windows.Storage.ApplicationData.Current.LocalFolder.Path,
+                "last_session_crash_log.txt");
+
+            File.AppendAllText(logPath,
+                $"=== Crash Report ===\n" +
+                $"Version:   {EnvironmentVariables.appVersion}\n" +
+                $"Source:    {source}\n" +
+                $"Time:      {DateTime.Now}\n" +
+                $"Message:   {message}\n" +
+                $"Detail:\n{detail}\n\n" +
+                $"{TraceManager.GetAllTraceLogs()}\n\n");
+        }
+        catch { /* if even this fails there's nothing left to do */ }
+    }
+
+    public static Windows.ApplicationModel.PackageVersion GetPackageVersion()
+    {
+        try
+        {
+            return Windows.ApplicationModel.Package.Current.Id.Version;
+        }
+        catch
+        {
+            return default;
+        }
     }
 
     /// <summary>

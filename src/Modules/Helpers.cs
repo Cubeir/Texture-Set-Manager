@@ -4,14 +4,15 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks;
 using ImageMagick;
-
 
 namespace Texture_Set_Manager.Modules;
 
 public static class Helpers
 {
+    /// <summary>
+    /// Reads images of any given format, with an option to return opacity at maximum (retaining rgb data under 0 opacity pixels)
+    /// </summary>
     public static Bitmap ReadImage(string imagePath, bool maxOpacity = false)
     {
         try
@@ -20,17 +21,28 @@ public static class Helpers
             var width = (int)sourceImage.Width;
             var height = (int)sourceImage.Height;
 
-
             var bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
 
+            // This loop used to call sourcePixels.GetPixel(x, y) - a native ImageMagick call
+            // per pixel - AND bitmap.SetPixel(x, y, ...) - a native GDI+ call per pixel. Both
+            // are now a single bulk native call on each side: GetValues() fetches every channel
+            // of every pixel at once (the returned array's length is exactly
+            // width * height * channelCount, in the same row-major, channel-interleaved order
+            // that indexing a single GetPixel(x,y) result already used), and FastBitmap replaces
+            // the GDI+ side. The decode logic itself - every ColorType branch, the >>8
+            // truncation, maxOpacity - is untouched; only how raw channel values are fetched.
             using (var sourcePixels = sourceImage.GetPixels())
+            using (var fb = new FastBitmap(bitmap, writable: true))
             {
+                var channelCount = (int)sourceImage.ChannelCount;
+                var values = sourcePixels.GetValues()
+                    ?? throw new InvalidOperationException($"Failed to read pixel data for '{imagePath}'.");
 
                 for (var y = 0; y < height; y++)
                 {
                     for (var x = 0; x < width; x++)
                     {
-                        var pixelData = sourcePixels.GetPixel(x, y);
+                        var pixelIndex = (y * width + x) * channelCount;
 
                         byte r, g, b, a;
 
@@ -38,41 +50,41 @@ public static class Helpers
 
                         if (sourceImage.ColorType == ColorType.Grayscale)
                         {
-                            var gray = (byte)(pixelData[0] >> 8);
+                            var gray = (byte)(values[pixelIndex + 0] >> 8);
                             r = g = b = gray;
                             a = 255;
                         }
                         else if (sourceImage.ColorType == ColorType.GrayscaleAlpha)
                         {
-                            var gray = (byte)(pixelData[0] >> 8);
+                            var gray = (byte)(values[pixelIndex + 0] >> 8);
                             r = g = b = gray;
-                            var originalAlpha = (byte)(pixelData[1] >> 8);
+                            var originalAlpha = (byte)(values[pixelIndex + 1] >> 8);
                             a = maxOpacity ? (byte)255 : originalAlpha;
                         }
                         else if (sourceImage.ColorType == ColorType.TrueColor)
                         {
-                            r = (byte)(pixelData[0] >> 8);
-                            g = (byte)(pixelData[1] >> 8);
-                            b = (byte)(pixelData[2] >> 8);
+                            r = (byte)(values[pixelIndex + 0] >> 8);
+                            g = (byte)(values[pixelIndex + 1] >> 8);
+                            b = (byte)(values[pixelIndex + 2] >> 8);
                             a = 255;
                         }
                         else if (sourceImage.ColorType == ColorType.TrueColorAlpha)
                         {
-                            r = (byte)(pixelData[0] >> 8);
-                            g = (byte)(pixelData[1] >> 8);
-                            b = (byte)(pixelData[2] >> 8);
-                            var originalAlpha = (byte)(pixelData[3] >> 8);
+                            r = (byte)(values[pixelIndex + 0] >> 8);
+                            g = (byte)(values[pixelIndex + 1] >> 8);
+                            b = (byte)(values[pixelIndex + 2] >> 8);
+                            var originalAlpha = (byte)(values[pixelIndex + 3] >> 8);
                             a = maxOpacity ? (byte)255 : originalAlpha;
                         }
                         else if (sourceImage.ColorType == ColorType.Palette)
                         {
-                            r = (byte)(pixelData[0] >> 8);
-                            g = (byte)(pixelData[1] >> 8);
-                            b = (byte)(pixelData[2] >> 8);
+                            r = (byte)(values[pixelIndex + 0] >> 8);
+                            g = (byte)(values[pixelIndex + 1] >> 8);
+                            b = (byte)(values[pixelIndex + 2] >> 8);
 
                             if (hasAlpha && sourceImage.ChannelCount > 3)
                             {
-                                var originalAlpha = (byte)(pixelData[3] >> 8);
+                                var originalAlpha = (byte)(values[pixelIndex + 3] >> 8);
                                 a = maxOpacity ? (byte)255 : originalAlpha;
                             }
                             else
@@ -84,13 +96,13 @@ public static class Helpers
                         {
                             var channels = (int)sourceImage.ChannelCount;
 
-                            r = channels > 0 ? (byte)(pixelData[0] >> 8) : (byte)0;
-                            g = channels > 1 ? (byte)(pixelData[1] >> 8) : r;
-                            b = channels > 2 ? (byte)(pixelData[2] >> 8) : r;
+                            r = channels > 0 ? (byte)(values[pixelIndex + 0] >> 8) : (byte)0;
+                            g = channels > 1 ? (byte)(values[pixelIndex + 1] >> 8) : r;
+                            b = channels > 2 ? (byte)(values[pixelIndex + 2] >> 8) : r;
 
                             if (hasAlpha && channels > 3)
                             {
-                                var originalAlpha = (byte)(pixelData[3] >> 8);
+                                var originalAlpha = (byte)(values[pixelIndex + 3] >> 8);
                                 a = maxOpacity ? (byte)255 : originalAlpha;
                             }
                             else
@@ -98,8 +110,8 @@ public static class Helpers
                                 a = 255;
                             }
                         }
-                        var pixelColor = Color.FromArgb(a, r, g, b);
-                        bitmap.SetPixel(x, y, pixelColor);
+
+                        fb[x, y] = Color.FromArgb(a, r, g, b);
                     }
                 }
             }
@@ -121,6 +133,10 @@ public static class Helpers
             return errorBitmap;
         }
     }
+
+    /// <summary>
+    /// Write a bitmap to a path as raw, pure targa with 4 channels, 8 bit per channel
+    /// </summary>
     public static void WriteImageAsTGA(Bitmap bitmap, string outputPath)
     {
         try
@@ -145,11 +161,16 @@ public static class Helpers
             writer.Write((byte)32);       // Pixel Depth (32-bit RGBA)
             writer.Write((byte)8);        // Image Descriptor (default origin, 8-bit alpha)
 
+            // Was bitmap.GetPixel(x, y) per pixel - every TGA save (the majority format for
+            // RTX PBR packs) paid for that. FastBitmap bulk-copies the whole buffer once via
+            // LockBits/Marshal.Copy, then reads are plain array indexing.
+            using var fb = new FastBitmap(bitmap, writable: false);
+
             for (var y = height - 1; y >= 0; y--) // TGA is bottom-up by default
             {
                 for (var x = 0; x < width; x++)
                 {
-                    var pixel = bitmap.GetPixel(x, y);
+                    var pixel = fb[x, y];
 
                     writer.Write(pixel.B);
                     writer.Write(pixel.G);
@@ -160,61 +181,86 @@ public static class Helpers
         }
         catch (Exception ex)
         {
-            // Log($"Error writing direct TGA to {outputPath}: {ex.Message}");
+            Trace.WriteLine($"Error writing direct TGA to {outputPath}: {ex.Message}");
             throw;
         }
     }
 
-    public static void ConvertImagesToTga(string[] filePaths)
+    /// <summary>
+    /// Converts the given images to Targa in place: the .tga is written next to the
+    /// original and the original is deleted. Files that are already .tga are left
+    /// completely untouched — re-encoding them would be pure churn (and would rewrite
+    /// bytes the artist may have authored deliberately).
+    /// Returns the resulting path for every input, in the same order.
+    /// </summary>
+    public static IReadOnlyList<string> ConvertImagesToTga(IEnumerable<string> filePaths)
     {
-        foreach (string originalPath in filePaths)
+        var results = new List<string>();
+
+        foreach (var originalPath in filePaths)
         {
             try
             {
                 // Safety
-                string extension = Path.GetExtension(originalPath);
+                var extension = Path.GetExtension(originalPath).ToLowerInvariant();
                 if (!EnvironmentVariables.supportedFileExtensions.Contains(extension))
                 {
                     Trace.WriteLine($"Skipping file {originalPath}: Unsupported extension");
+                    results.Add(originalPath);
                     continue;
                 }
                 if (!File.Exists(originalPath))
                 {
                     Trace.WriteLine($"Skipping file {originalPath}: File does not exist");
+                    results.Add(originalPath);
                     continue;
                 }
 
-                // Read the original image
-                Bitmap bmp = ReadImage(originalPath, maxOpacity: false);
+                // Already Targa — nothing to convert, nothing to delete.
+                if (extension == ".tga")
+                {
+                    Trace.WriteLine($"Already TGA, left as-is: {originalPath}");
+                    results.Add(originalPath);
+                    continue;
+                }
 
-                // Get original timestamp
-                DateTime origTime = File.GetLastWriteTime(originalPath);
+                var newPath = Path.ChangeExtension(originalPath, ".tga");
+                var origTime = File.GetLastWriteTime(originalPath);
 
-                // Create new path with .tga extension
-                string newPath = Path.ChangeExtension(originalPath, ".tga");
+                using (var bmp = ReadImage(originalPath, maxOpacity: false))
+                {
+                    WriteImageAsTGA(bmp, newPath);
+                }
 
-                // Write as TGA
-                WriteImageAsTGA(bmp, newPath);
-
-                // Restore original timestamp
+                // Restore original timestamp so pack diffing tools don't see a spurious change
                 File.SetLastWriteTime(newPath, origTime);
 
-                bmp.Dispose();
+                try
+                {
+                    File.Delete(originalPath);
+                    Trace.WriteLine($"Successfully converted: {originalPath} -> {newPath}");
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine($"Converted but could not delete original {originalPath}: {ex.Message}");
+                }
 
-                Trace.WriteLine($"Successfully converted: {originalPath} -> {newPath}");
+                results.Add(newPath);
             }
             catch (Exception ex)
             {
                 Trace.WriteLine($"Failed to convert file {originalPath}: {ex.Message}");
-                continue;
+                results.Add(originalPath);
             }
         }
+
+        return results;
     }
 }
 
 
 /// <summary>
-/// Additional helper to do a thing only once per runtime, use RanOnceFlag.Set("key") to set a flag with a unique key.
+/// Additional helper to do a thing only once per runtime, use RuntimeFlags.Set("key") to set a flag with a unique key.
 /// </summary>
 public static class RuntimeFlags
 {

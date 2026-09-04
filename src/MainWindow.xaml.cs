@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
@@ -15,31 +17,26 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
-using Windows.Storage.Pickers;
-using Windows.Storage;
-using Windows.ApplicationModel.DataTransfer;
 using Texture_Set_Manager.Core;
 using Texture_Set_Manager.Modules;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.Graphics;
-using Windows.UI;
+using Windows.Storage;
+using Windows.Storage.Pickers;
+using static Texture_Set_Manager.Core.WindowControlsManager;
 using static Texture_Set_Manager.EnvironmentVariables;
 using static Texture_Set_Manager.EnvironmentVariables.Persistent;
-using static Texture_Set_Manager.Core.WindowControlsManager;
 
 namespace Texture_Set_Manager;
 
 // In the hindsight it would've been a good idea to link the official doc in the app 🤣
 // redo the render with an actual 3d gear instead of the flat thing, and with higer res window sshot, that one is fugly
 
-// Does the texture set manager actually generate files in the same format as input?
-// what does the conver to tga button to exactly? both input and output become tga? or?!
-// make it make sense
-// convert to tga must turn ONLY THE OUTPUT to TGA?
-// And output should OTHERWISE MATCH the format of INPUT
-
 public static class EnvironmentVariables
 {
-    public static string? appVersion = null;
+    private static readonly Windows.ApplicationModel.PackageVersion _version = App.GetPackageVersion();
+    public static readonly string appVersion = $"{_version.Major}.{_version.Minor}.{_version.Build}.{_version.Revision}";
+    public static readonly string appVersionMajorMinor = $"{_version.Major}.{_version.Minor}";
 
     public static string[]? selectedFiles = null;
     public static string? selectedFolder = null;
@@ -56,6 +53,7 @@ public static class EnvironmentVariables
         public static bool SmartFilters = Defaults.SmartFilters;
         public static bool ConvertToTarga = Defaults.ConvertToTarga;
         public static bool CreateBackup = Defaults.CreateBackup;
+        public static bool CreateNewFolders = Defaults.CreateNewFolders;
 
         public static string AppThemeMode = Defaults.AppThemeMode;
     }
@@ -70,15 +68,16 @@ public static class EnvironmentVariables
         public const bool SmartFilters = true;
         public const bool ConvertToTarga = false;
         public const bool CreateBackup = true;
+        public const bool CreateNewFolders = false;
 
         public const string AppThemeMode = "Dark";
     }
 
     // Set Window size default for all windows
-    public const int WindowSizeX = 640;
-    public const int WindowSizeY = 392;
-    public const int WindowMinSizeX = 640;
-    public const int WindowMinSizeY = 392;
+    public const int WindowSizeX = 720;
+    public const int WindowSizeY = 480;
+    public const int WindowMinSizeX = 720;
+    public const int WindowMinSizeY = 480;
 
     // Saves persistent variables
     public static void SaveSettings()
@@ -125,6 +124,14 @@ public sealed partial class MainWindow : Window
 
     private readonly WindowStateManager _windowStateManager;
 
+    // Everything that keeps running after the window is gone has to be told to stop, and
+    // every handler hung off the content tree has to be unhooked — leaving a theme listener
+    // (or a DispatcherTimer) alive past Closed is exactly what used to spit a crash minidump
+    // into the temp folder on every single exit.
+    private bool _isClosing = false;
+    private FrameworkElement? _rootElement;
+    private CancellationTokenSource? _analysisCts;
+
     [DllImport("user32.dll")]
     public static extern uint GetDpiForWindow(IntPtr hWnd);
 
@@ -136,6 +143,8 @@ public sealed partial class MainWindow : Window
         // Properties to set before it is rendered
         SetMainWindowProperties();
         InitializeComponent();
+
+        InitializeLogTypewriter();
 
         // Titlebar drag region
         SetTitleBar(TitleBarDragArea);
@@ -150,99 +159,191 @@ public sealed partial class MainWindow : Window
 
         Instance = this;
 
-        var defaultSize = new SizeInt32(WindowSizeX, WindowSizeY);
         _windowStateManager.ApplySavedStateOrDefaults();
 
-        // Version, title and initial logs
-        var version = Windows.ApplicationModel.Package.Current.Id.Version;
-        var versionString = $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
-        appVersion = versionString;
-        Log($"Version: {versionString}");
+        Log($"Version: {appVersion}");
 
         // Do upon app closure
-        this.Closed += (s, e) =>
-        {
-            SaveSettings();
-            App.CleanupMutex();
-        };
+        this.Closed += MainWindow_Closed;
 
+        // Fake titlebar buttons aren't real caption buttons, so nothing dims them automatically —
+        // mirror the system's inactive-titlebar look by hand.
+        this.Activated += MainWindow_ActivationChanged;
 
         // Things to do after mainwindow is initialized
-        this.Activated += MainWindow_Activated;
+        if (Content is FrameworkElement root)
+        {
+            _rootElement = root;
+            root.Loaded += MainWindow_Loaded;
+        }
     }
 
-    private async void MainWindow_Activated(object sender, WindowActivatedEventArgs e)
+    private void MainWindow_Closed(object sender, WindowEventArgs args)
     {
-        // Unsubscribe to avoid running this again
-        this.Activated -= MainWindow_Activated;
+        // Set first: every guarded callback checks this, so anything already queued becomes a no-op
+        // the moment closure begins rather than reaching into a half-torn-down window.
+        _isClosing = true;
 
-        // Give the window time to render for the first time
-        // If one day something goes on the background that needs waiting, increase this, it delays the flash
-        await Task.Delay(50);
+        // Each step is isolated. A throw partway through used to abandon the rest of the teardown
+        // (leaving timers running and the mutex held) which is how a clean exit turned into a
+        // minidump in the temp folder.
+        Safely(SaveSettings);
 
+        // Stop every timer BEFORE the content tree goes away — a DispatcherTimer that ticks into
+        // a dead window doesn't raise a catchable exception, it takes the process with it.
+        Safely(() => { _typewriterTimer?.Stop(); _typewriterTimer = null; });
+        Safely(() => { rotationTimer?.Stop(); rotationTimer = null; });
+        Safely(() => { speedIncrementTimer?.Stop(); speedIncrementTimer = null; });
+        Safely(() => { _analysisCts?.Cancel(); _analysisCts?.Dispose(); _analysisCts = null; });
 
-        LoadSettings();
-
-        // APPLY THEME [if it isn't a button click they won't cycle and apply the loaded setting instead]
-        CycleThemeButton_Click(null, null);
-
-        // Update the UI
-        UpdateUI();
-
-        // lazy credits and PSA retriever, credits are saved for donate hover event, PSA is shown when ready
-        _ = CreditsUpdater.GetCredits(false);
-        _ = Task.Run(async () =>
+        // Unhook everything hanging off the content tree. The theme listener in particular is the
+        // one that used to outlive the window and keep firing at it.
+        Safely(() =>
         {
-            var psa = await PSAUpdater.GetPSAAsync();
-            if (!string.IsNullOrWhiteSpace(psa))
+            if (_rootElement != null)
             {
-                Log(psa, LogLevel.Informational);
+                _rootElement.ActualThemeChanged -= Root_ActualThemeChanged;
+                _rootElement = null;
             }
         });
+        Safely(() => IncludeSubsurfaceScatteringToggle.IsEnabledChanged -= SSSToggle_IsEnabledChanged);
 
-        // Brief delay to ensure everything is fully rendered, then fade out splash screen
-        await Task.Delay(500);
-        // ================ Do all UI updates you DON'T want to be seen BEFORE here, and what you want seen AFTER ======================= 
-        await FadeOutSplashScreen();
+        Safely(() => this.Activated -= MainWindow_ActivationChanged);
+        Safely(() => this.Closed -= MainWindow_Closed);
 
-        // Show Leave a Review prompt, has a 10 sec cd built in
-        _ = ReviewPromptManager.InitializeAsync(MainGrid);
+        Safely(() => _windowStateManager?.Dispose());
 
-        await Task.Delay(50);
-        StartLogoSpinner();
-        await Task.Delay(50);
-        if (iconImageBox?.RenderTransform is RotateTransform rotateTransform)
+        Safely(App.CleanupMutex);
+
+        static void Safely(Action step)
         {
-            rotateTransform.Angle = rotationAngle;
+            try { step(); }
+            catch (Exception ex) { Trace.WriteLine($"[MainWindow] Teardown step failed: {ex.Message}"); }
         }
+    }
 
-        async Task FadeOutSplashScreen()
+    private void MainWindow_ActivationChanged(object sender, WindowActivatedEventArgs e)
+    {
+        if (_isClosing) return;
+
+        var opacity = e.WindowActivationState != WindowActivationState.Deactivated ? 1.0 : 0.5;
+
+        ChatButton.Opacity = opacity;
+        DonateButton.Opacity = opacity;
+        CycleThemeButton.Opacity = opacity;
+        AnalyzeTextureSetsButton.Opacity = opacity;
+    }
+
+    private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        try
         {
-            if (SplashOverlay == null) return;
+            var root = Content as FrameworkElement;
+            if (root != null) root.Loaded -= MainWindow_Loaded;
 
-            var fadeOut = new DoubleAnimation
+            // Load variables back in from the previous session
+            LoadSettings();
+
+            // APPLY THEME [passing nulls means it isn't a button click, so instead of cycling it applies the loaded setting]
+            CycleThemeButton_Click(null, null);
+
+            // Give the window time to render for the first time
+            await Task.Delay(50);
+
+            // Apply theme-driven colors once, then keep them in sync. Both subscriptions are
+            // torn down in MainWindow_Closed — see the note on _isClosing.
+            if (root != null)
             {
-                From = 1.0,
-                To = 0.0,
-                Duration = new Duration(TimeSpan.FromMilliseconds(250)),
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
-            };
+                ThemeService.ApplyTitleBarColors(this.AppWindow, root.ActualTheme);
+                ApplySSSBevelColors(root.ActualTheme);
 
-            var storyboard = new Storyboard();
-            Storyboard.SetTarget(fadeOut, SplashOverlay);
-            Storyboard.SetTargetProperty(fadeOut, "Opacity");
-            storyboard.Children.Add(fadeOut);
+                IncludeSubsurfaceScatteringToggle.IsEnabledChanged += SSSToggle_IsEnabledChanged;
+                root.ActualThemeChanged += Root_ActualThemeChanged;
+            }
 
-            var tcs = new TaskCompletionSource<bool>();
-            storyboard.Completed += (s, e) =>
+            // Might summon a ContentDialog about last session's crash
+            await CheckForCrashLog();
+
+            // Update the UI
+            UpdateUI();
+
+            ToolTipService.SetToolTip(TitleBarText, $"Version: {appVersion}");
+
+            // Brief delay to ensure everything is fully rendered, then fade out splash screen
+            await Task.Delay(500);
+            // ================ Do all UI updates you DON'T want to be seen BEFORE here, and what you want seen AFTER =======================
+            await FadeOutSplashScreen();
+
+            // Show Leave a Review prompt, has a cooldown built in
+            _ = ReviewPromptManager.InitializeAsync(MainGrid);
+
+            await Task.Delay(50);
+            StartLogoSpinner();
+
+            async Task FadeOutSplashScreen()
             {
-                SplashOverlay.Visibility = Visibility.Collapsed;
-                tcs.SetResult(true);
-            };
+                if (SplashOverlay == null) return;
 
-            storyboard.Begin();
-            await tcs.Task;
+                var fadeOut = new DoubleAnimation
+                {
+                    From = 1.0,
+                    To = 0.0,
+                    Duration = new Duration(TimeSpan.FromMilliseconds(250)),
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
+                };
+
+                var storyboard = new Storyboard();
+                Storyboard.SetTarget(fadeOut, SplashOverlay);
+                Storyboard.SetTargetProperty(fadeOut, "Opacity");
+                storyboard.Children.Add(fadeOut);
+
+                var tcs = new TaskCompletionSource<bool>();
+                storyboard.Completed += (s, e) =>
+                {
+                    SplashOverlay.Visibility = Visibility.Collapsed;
+                    tcs.TrySetResult(true);
+                };
+
+                storyboard.Begin();
+                await tcs.Task;
+            }
         }
+        catch (Exception ex)
+        {
+            App.WriteCrashLog("MainWindow_Loaded", ex.Message, ex.ToString());
+        }
+    }
+
+    private void Root_ActualThemeChanged(FrameworkElement sender, object args)
+    {
+        // Setting properties on a window that's already been torn down throws deep in the
+        // native layer, so bail the moment closure starts.
+        if (_isClosing) return;
+
+        ThemeService.ApplyTitleBarColors(this.AppWindow, sender.ActualTheme);
+        ApplySSSBevelColors(sender.ActualTheme);
+        ThemeService.Broadcast(sender.ActualTheme);
+    }
+
+    private void SSSToggle_IsEnabledChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (_isClosing || _rootElement == null) return;
+        ApplySSSBevelColors(_rootElement.ActualTheme);
+    }
+
+    /// <summary>
+    /// The two bevelled edges flanking the Subsurface Scattering button. They accent when it's
+    /// checked, fall back to the resting bevel when it isn't, dim when the button is disabled
+    /// (e.g. while a generation run has the UI locked), and follow the theme in every case.
+    /// </summary>
+    private void ApplySSSBevelColors(ElementTheme theme)
+    {
+        var isEnabled = IncludeSubsurfaceScatteringToggle.IsEnabled;
+
+        LeftEdgeOfSSSButton.BorderBrush = new SolidColorBrush(
+            ThemeService.GetBevelColor(theme, ThemeService.BevelEdge.Left, accented: enableSSS, isEnabled: isEnabled));
+        DarkEdgeOfSSSButton.BorderBrush = new SolidColorBrush(
+            ThemeService.GetBevelColor(theme, ThemeService.BevelEdge.Right, accented: enableSSS, isEnabled: isEnabled));
     }
 
 
@@ -272,82 +373,118 @@ public sealed partial class MainWindow : Window
         appWindow.SetTaskbarIcon(iconPath);
         appWindow.SetTitleBarIcon(iconPath);
 
-        // Watches theme changes and adjusts based on theme
-        // use only for stuff that can be altered before mainwindow initlization
-        ThemeWatcher(this, theme =>
-        {
-            var titleBar = appWindow.TitleBar;
-            if (titleBar == null) return;
-
-            bool isLight = theme == ElementTheme.Light;
-
-            titleBar.ButtonForegroundColor = isLight ? Colors.Black : Colors.White;
-            titleBar.ButtonHoverForegroundColor = isLight ? Colors.Black : Colors.White;
-            titleBar.ButtonPressedForegroundColor = isLight ? Colors.Black : Colors.White;
-            titleBar.ButtonInactiveForegroundColor = isLight
-                ? Color.FromArgb(255, 100, 100, 100)
-                : Color.FromArgb(255, 160, 160, 160);
-
-            titleBar.ButtonBackgroundColor = Colors.Transparent;
-            titleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
-            titleBar.ButtonHoverBackgroundColor = isLight
-                ? Color.FromArgb(20, 0, 0, 0)
-                : Color.FromArgb(40, 255, 255, 255);
-            titleBar.ButtonPressedBackgroundColor = isLight
-                ? Color.FromArgb(40, 0, 0, 0)
-                : Color.FromArgb(60, 255, 255, 255);
-
-
-            // Color of that little border next to the button 🍝
-            if (enableSSS)
-            {
-                var accentColorKey = theme == ElementTheme.Light ? "SystemAccentColorLight1" : "SystemAccentColorLight3";
-                LeftEdgeOfSSSButton.BorderBrush = new SolidColorBrush((Color)Application.Current.Resources[accentColorKey]);
-            }
-            else
-            {
-                var themeKey = theme == ElementTheme.Light ? "Light" : "Dark";
-                var themeDictionaries = Application.Current.Resources.ThemeDictionaries;
-                if (themeDictionaries.TryGetValue(themeKey, out var themeDict) && themeDict is ResourceDictionary dict)
-                {
-                    if (dict.TryGetValue("FakeSplitButtonBrightBorderColor", out var colorObj) && colorObj is Color color)
-                    {
-                        LeftEdgeOfSSSButton.BorderBrush = new SolidColorBrush(color);
-                    }
-                }
-            }
-        });
-
-
+        // Titlebar colors are applied (and kept in sync) from MainWindow_Loaded, where there's
+        // a content tree to hang a properly-unsubscribed listener off of.
     }
-    public static void ThemeWatcher(Window window, Action<ElementTheme> onThemeChanged)
+
+    private async Task CheckForCrashLog()
     {
-        void HookThemeChangeListener()
+        try
         {
-            if (window.Content is FrameworkElement root)
+            var logPath = Path.Combine(
+                ApplicationData.Current.LocalFolder.Path,
+                "last_session_crash_log.txt");
+
+            if (!File.Exists(logPath)) return;
+
+            var content = File.ReadAllText(logPath);
+            File.Delete(logPath);
+
+            var copyButton = new Button
             {
-                root.ActualThemeChanged += (_, __) =>
+                Content = "Copy Crash Logs",
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+
+            var githubLink = new HyperlinkButton
+            {
+                Content = "Create an issue on GitHub",
+                NavigateUri = new Uri("https://github.com/Cubeir/Texture-Set-Manager/issues"),
+                Margin = new Thickness(0, 2, 0, 0),
+                Padding = new Thickness(4, 4, 4, 4)
+            };
+
+            var discordLink = new HyperlinkButton
+            {
+                Content = "Create a post on the Vanilla RTX Discord Server",
+                NavigateUri = new Uri("https://discord.gg/A4wv4wwYud"),
+                Padding = new Thickness(4, 4, 4, 4)
+            };
+
+            var logBox = new ScrollViewer
+            {
+                Content = new TextBlock
                 {
-                    onThemeChanged(root.ActualTheme);
-                };
+                    Text = content,
+                    FontFamily = new FontFamily("Consolas"),
+                    FontSize = 11,
+                    IsTextSelectionEnabled = true,
+                    TextWrapping = TextWrapping.Wrap
+                },
+                MaxHeight = 200,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            };
 
-                // also call once now
-                onThemeChanged(root.ActualTheme);
-            }
+            var dismissButton = new Button
+            {
+                Content = "Continue Using the App (dismisses the report)",
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+
+            var panel = new StackPanel { Spacing = 12 };
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Oh no! Looks like a crash occurred during the previous session, you may continue to use the app, but it would be better if you report it to the developer to see it patched up soon!",
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            var linksPanel = new StackPanel { Spacing = 2 };
+            linksPanel.Children.Add(new TextBlock { Text = "Report using one of the following methods:" });
+            linksPanel.Children.Add(githubLink);
+            linksPanel.Children.Add(discordLink);
+            panel.Children.Add(linksPanel);
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Crash details:",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+            });
+            panel.Children.Add(logBox);
+            panel.Children.Add(copyButton);
+            panel.Children.Add(dismissButton);
+
+            var dialog = new ContentDialog
+            {
+                Title = "Previous Session Crash Report",
+                Content = panel,
+                XamlRoot = this.Content.XamlRoot,
+                RequestedTheme = ((FrameworkElement)this.Content).ActualTheme
+            };
+
+            copyButton.Click += async (s, e) =>
+            {
+                var dataPackage = new DataPackage();
+                dataPackage.SetText(content);
+                Clipboard.SetContent(dataPackage);
+
+                copyButton.Content = "Copied!";
+                await Task.Delay(1500);
+                copyButton.Content = "Copy Crash Logs";
+            };
+
+            dismissButton.Click += (s, e) => dialog.Hide();
+
+            await dialog.ShowAsync();
         }
-
-        // Safe way to defer until content is ready
-        window.Activated += (_, __) =>
-        {
-            HookThemeChangeListener();
-        };
+        catch { /* a failed crash report must never itself become a crash */ }
     }
-
 
 
     private double rotationAngle = 0.0;
-    private DispatcherTimer rotationTimer;
-    private DispatcherTimer speedIncrementTimer;
+    private DispatcherTimer? rotationTimer;
+    private DispatcherTimer? speedIncrementTimer;
     private double currentSpeedDegreesPerSecond = 0.0;
     private const int AccelerationIntervalMs = 1000; // How frequently acceleration happens
     private const double SpeedIncrementDegreesPerMinute = 1.0; // How much acceleration (in extra degrees to spin per min)
@@ -355,35 +492,45 @@ public sealed partial class MainWindow : Window
     private void StartLogoSpinner()
     {
         var random = new Random();
-        double directionMultiplier = random.Next(2) == 0 ? 1.0 : -1.0;
+        var directionMultiplier = random.Next(2) == 0 ? 1.0 : -1.0;
 
-        // Create a RotateTransform on the image with center rotation
-        var rotateTransform = new RotateTransform();
-
-        // Set the center point to the center of the image
-        rotateTransform.CenterX = 10.0;  // Half of image width
-        rotateTransform.CenterY = 10.0;  // Half of image height
-
+        // Rotation happens around the element's own middle via RenderTransformOrigin="0.5,0.5"
+        // in XAML, so no hand-computed CenterX/CenterY that has to be kept in step with the
+        // icon's pixel size (getting those even half a pixel wrong is what made the logo look
+        // like it drifted off-axis as it sped up).
+        var rotateTransform = new RotateTransform { Angle = rotationAngle };
         iconImageBox.RenderTransform = rotateTransform;
 
-        // Timer for updating rotation angle (30+ FPS)
-        rotationTimer = new DispatcherTimer();
-        rotationTimer.Interval = TimeSpan.FromMilliseconds(AnimationFrameIntervalMs);
+        // Integrate against the real elapsed time rather than the nominal interval: DispatcherTimer
+        // ticks are best-effort, and assuming a perfect 7ms made the spin visibly stutter once it
+        // got fast enough for a dropped frame to matter.
+        var stopwatch = Stopwatch.StartNew();
+        var lastElapsed = stopwatch.Elapsed;
+
+        rotationTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(AnimationFrameIntervalMs)
+        };
         rotationTimer.Tick += (s, e) =>
         {
-            // Update rotation angle based on current speed
-            rotationAngle += currentSpeedDegreesPerSecond * (AnimationFrameIntervalMs / 1000.0);
+            if (_isClosing) return;
 
-            // Apply transform to image
+            var now = stopwatch.Elapsed;
+            var deltaSeconds = (now - lastElapsed).TotalSeconds;
+            lastElapsed = now;
+
+            rotationAngle = (rotationAngle + currentSpeedDegreesPerSecond * deltaSeconds) % 360.0;
             rotateTransform.Angle = rotationAngle;
         };
         rotationTimer.Start();
 
-        // Timer for incrementing speed every minute
-        speedIncrementTimer = new DispatcherTimer();
-        speedIncrementTimer.Interval = TimeSpan.FromMilliseconds(AccelerationIntervalMs);
+        speedIncrementTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(AccelerationIntervalMs)
+        };
         speedIncrementTimer.Tick += (s, e) =>
         {
+            if (_isClosing) return;
             currentSpeedDegreesPerSecond += SpeedIncrementDegreesPerMinute * directionMultiplier;
         };
         speedIncrementTimer.Start();
@@ -391,17 +538,18 @@ public sealed partial class MainWindow : Window
 
 
 
-    public async void UpdateUI()
+    public void UpdateUI()
     {
         // Match bool-based UI elements to their current bools
         ProcessSubfoldersToggle.IsOn = ProcessSubfolders;
         SmartFiltersToggle.IsOn = SmartFilters;
         ConvertToTGAToggle.IsOn = ConvertToTarga;
         CreateBackupToggle.IsOn = CreateBackup;
+        CreateNewFoldersToggle.IsOn = CreateNewFolders;
 
-        // Dropdwon and SSS
+        // Dropdown and SSS
         IncludeSubsurfaceScatteringToggle.IsChecked = enableSSS;
-        string displayText = SecondaryPBRMapType switch
+        var displayText = SecondaryPBRMapType switch
         {
             "none" => "None",
             "normalmap" => "Normal Map",
@@ -413,91 +561,23 @@ public sealed partial class MainWindow : Window
 
 
 
-    public enum LogLevel
-    {
-        Success, Informational, Warning, Error, Network, Lengthy, Debug
-    }
-    public static void Log(string message, LogLevel? level = null)
-    {
-        void Prepend()
-        {
-            var textBox = Instance.SidebarLog;
-
-            string prefix = level switch
-            {
-                LogLevel.Success => "✅ ",
-                LogLevel.Informational => "ℹ️ ",
-                LogLevel.Warning => "⚠️ ",
-                LogLevel.Error => "❌ ",
-                LogLevel.Network => "🛜 ",
-                LogLevel.Lengthy => "⏳ ",
-                LogLevel.Debug => "🔍 ",
-                _ => ""
-            };
-
-            string prefixedMessage = $"{prefix}{message}";
-            string separator = "";
-
-            if (string.IsNullOrWhiteSpace(textBox.Text))
-            {
-                textBox.Text = prefixedMessage + "\n";
-            }
-            else
-            {
-                var sb = new StringBuilder(prefixedMessage.Length + textBox.Text.Length + separator.Length + 2);
-                sb.Append(prefixedMessage)
-                  .Append('\n')
-                  .Append(separator)
-                  .Append('\n')
-                  .Append(textBox.Text);
-                textBox.Text = sb.ToString();
-            }
-
-            // Scroll to top
-            textBox.UpdateLayout();
-            var sv = GetScrollViewer(textBox);
-            sv?.ChangeView(null, 0, null);
-        }
-
-        if (Instance.DispatcherQueue.HasThreadAccess)
-            Prepend();
-        else
-            Instance.DispatcherQueue.TryEnqueue(Prepend);
-    }
-    public static ScrollViewer GetScrollViewer(DependencyObject obj)
-    {
-        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(obj); i++)
-        {
-            var child = VisualTreeHelper.GetChild(obj, i);
-            if (child is ScrollViewer sv)
-                return sv;
-
-            var result = GetScrollViewer(child);
-            if (result != null)
-                return result;
-        }
-        return null;
-    }
-
-
-
     public static void OpenUrl(string url)
     {
 #if DEBUG
         Log("OpenUrl is disabled in debug builds.", LogLevel.Informational);
         return;
 #else
-    try
-    {
-        if (!Uri.IsWellFormedUriString(url, UriKind.Absolute))
-            throw new ArgumentException("Malformed URL.");
-        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-    }
-    catch (Exception ex)
-    {
-        Log($"Details: {ex.Message}", LogLevel.Informational);
-        Log("Failed to open URL. Make sure you have a browser installed and associated with web links.", LogLevel.Warning); 
-    }
+        try
+        {
+            if (!Uri.IsWellFormedUriString(url, UriKind.Absolute))
+                throw new ArgumentException("Malformed URL.");
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Log($"Details: {ex.Message}", LogLevel.Informational);
+            Log("Failed to open URL. Make sure you have a browser installed and associated with web links.", LogLevel.Warning);
+        }
 #endif
     }
 
@@ -512,36 +592,20 @@ public sealed partial class MainWindow : Window
     private void DonateButton_Click(object sender, RoutedEventArgs e)
     {
         DonateButton.Content = "\uEB52";
-        var credits = CreditsUpdater.GetCredits(true);
-        if (!string.IsNullOrEmpty(credits) && RuntimeFlags.Set("Wrote_Supporter_Shoutout"))
-        {
-            Log(credits);
-        }
-
         OpenUrl("https://ko-fi.com/cubeir");
     }
     private void DonateButton_PointerEntered(object sender, PointerRoutedEventArgs e)
     {
         DonateButton.Content = "\uEB52";
-        var credits = CreditsUpdater.GetCredits(true);
-        if (!string.IsNullOrEmpty(credits) && RuntimeFlags.Set("Wrote_Supporter_Shoutout"))
-        {
-            Log(credits);
-        }
     }
     private void DonateButton_PointerExited(object sender, PointerRoutedEventArgs e)
     {
         DonateButton.Content = "\uEB51";
-        var credits = CreditsUpdater.GetCredits(true);
-        if (!string.IsNullOrEmpty(credits) && RuntimeFlags.Set("Wrote_Supporter_Shoutout"))
-        {
-            Log(credits);
-        }
     }
     public void CycleThemeButton_Click(object? sender, RoutedEventArgs? e)
     {
-        bool invokedByClick = sender is Button;
-        string mode = EnvironmentVariables.Persistent.AppThemeMode;
+        var invokedByClick = sender is Button;
+        var mode = Persistent.AppThemeMode;
 
         if (invokedByClick)
         {
@@ -551,39 +615,38 @@ public sealed partial class MainWindow : Window
                 "Light" => "Dark",
                 _ => "System"
             };
-            EnvironmentVariables.Persistent.AppThemeMode = mode;
+            Persistent.AppThemeMode = mode;
         }
 
-        var root = MainWindow.Instance.Content as FrameworkElement;
-        root.RequestedTheme = mode switch
+        var root = Instance!.Content as FrameworkElement;
+
+        var targetTheme = mode switch
         {
             "Light" => ElementTheme.Light,
             "Dark" => ElementTheme.Dark,
             _ => ElementTheme.Default
         };
 
-        Button btn = (sender as Button) ?? CycleThemeButton;
+        if (root!.RequestedTheme != targetTheme)
+            root.RequestedTheme = targetTheme;
+
+        var btn = (sender as Button) ?? CycleThemeButton;
 
         // Visual Feedback
-        if (mode == "System")
-        {
-            btn.Content = new TextBlock
+        btn.Content = mode == "System"
+            ? new TextBlock
             {
                 Text = "A",
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
                 FontSize = 15
-            };
-        }
-        else
-        {
-            btn.Content = mode switch
+            }
+            : mode switch
             {
                 "Light" => "\uE706",
                 "Dark" => "\uEC46",
                 _ => "A",
             };
-        }
 
         ToolTipService.SetToolTip(btn, "Theme: " + mode);
     }
@@ -612,7 +675,7 @@ public sealed partial class MainWindow : Window
 
                 Log("Selected folder path: " + selectedFolder, LogLevel.Success);
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 Trace.WriteLine(ex);
             }
@@ -637,7 +700,7 @@ public sealed partial class MainWindow : Window
                 var items = e.DataView.GetStorageItemsAsync().AsTask().Result;
 
                 // If any item is a folder, allow the drop
-                bool hasFolder = false;
+                var hasFolder = false;
                 foreach (var item in items)
                 {
                     if (item is StorageFolder)
@@ -711,7 +774,7 @@ public sealed partial class MainWindow : Window
                 picker.CommitButtonText = "Pick color textures";
                 picker.SuggestedStartLocation = (Microsoft.Windows.Storage.Pickers.PickerLocationId)PickerLocationId.Desktop;
                 picker.ViewMode = (Microsoft.Windows.Storage.Pickers.PickerViewMode)PickerViewMode.Thumbnail;
-                foreach (string filetype in supportedFileExtensions)
+                foreach (var filetype in supportedFileExtensions)
                 {
                     picker.FileTypeFilter.Add(filetype);
                 }
@@ -729,7 +792,7 @@ public sealed partial class MainWindow : Window
                         filePaths.Add(file.Path);
                     }
                     selectedFiles = filePaths.ToArray();
-                    string fileOrFiles = filePaths.Count > 1 ? "files" : "file";
+                    var fileOrFiles = filePaths.Count > 1 ? "files" : "file";
                     Log($"Selected {files.Count} {fileOrFiles}.");
                 }
             }
@@ -755,13 +818,13 @@ public sealed partial class MainWindow : Window
                 // Get the storage items to check file extensions
                 var items = e.DataView.GetStorageItemsAsync().AsTask().Result;
 
-                bool isValidDrop = false;
+                var isValidDrop = false;
 
                 foreach (var item in items)
                 {
                     if (item is StorageFile file)
                     {
-                        string fileExtension = Path.GetExtension(file.Name).ToLowerInvariant();
+                        var fileExtension = Path.GetExtension(file.Name).ToLowerInvariant();
                         if (supportedFileExtensions.Contains(fileExtension))
                         {
                             isValidDrop = true;
@@ -807,7 +870,7 @@ public sealed partial class MainWindow : Window
                     {
                         if (item is StorageFile file)
                         {
-                            string fileExtension = Path.GetExtension(file.Name).ToLowerInvariant();
+                            var fileExtension = Path.GetExtension(file.Name).ToLowerInvariant();
 
                             // Only process files with supported extensions
                             if (supportedFileExtensions.Contains(fileExtension))
@@ -820,7 +883,7 @@ public sealed partial class MainWindow : Window
                     if (filePaths.Count > 0)
                     {
                         selectedFiles = filePaths.ToArray();
-                        string fileOrFiles = filePaths.Count > 1 ? "files" : "file"; 
+                        var fileOrFiles = filePaths.Count > 1 ? "files" : "file";
                         Log($"Selected {filePaths.Count} valid {fileOrFiles}.");
                     }
                     else
@@ -852,31 +915,17 @@ public sealed partial class MainWindow : Window
 
 
 
-
     private void IncludeSubsurfaceScatteringToggle_Checked(object sender, RoutedEventArgs e)
     {
         enableSSS = true;
         Log("Enabled Subsurface Scattering", LogLevel.Informational);
-        var theme = LeftEdgeOfSSSButton.ActualTheme;
-        var accentColorKey = theme == ElementTheme.Light ? "SystemAccentColorLight1" : "SystemAccentColorLight3";
-        LeftEdgeOfSSSButton.BorderBrush = new SolidColorBrush((Color)Application.Current.Resources[accentColorKey]);
+        ApplySSSBevelColors(IncludeSubsurfaceScatteringToggle.ActualTheme);
     }
     private void IncludeSubsurfaceScatteringToggle_Unchecked(object sender, RoutedEventArgs e)
     {
         enableSSS = false;
         Log("Disabled Subsurface Scattering", LogLevel.Informational);
-
-        // Color of that little border next to the button
-        var theme = LeftEdgeOfSSSButton.ActualTheme;
-        var themeKey = theme == ElementTheme.Light ? "Light" : "Dark";
-        var themeDictionaries = Application.Current.Resources.ThemeDictionaries;
-        if (themeDictionaries.TryGetValue(themeKey, out var themeDict) && themeDict is ResourceDictionary dict)
-        {
-            if (dict.TryGetValue("FakeSplitButtonBrightBorderColor", out var colorObj) && colorObj is Color color)
-            {
-                LeftEdgeOfSSSButton.BorderBrush = new SolidColorBrush(color);
-            }
-        }
+        ApplySSSBevelColors(IncludeSubsurfaceScatteringToggle.ActualTheme);
     }
 
 
@@ -884,7 +933,7 @@ public sealed partial class MainWindow : Window
     {
         if (sender is MenuFlyoutItem item)
         {
-            string selectedValue = item.Text.ToLowerInvariant(); // normalize input
+            var selectedValue = item.Text.ToLowerInvariant(); // normalize input
             var mapType = selectedValue switch
             {
                 "none" => "none",
@@ -892,9 +941,9 @@ public sealed partial class MainWindow : Window
                 "heightmap" => "heightmap",
                 _ => "none"
             };
-            EnvironmentVariables.Persistent.SecondaryPBRMapType = mapType;
+            Persistent.SecondaryPBRMapType = mapType;
             Log($"Selected secondary PBR map type: {mapType}", LogLevel.Informational);
-            EnvironmentVariables.SaveSettings();
+            SaveSettings();
 
             // For consistency should have manually updated the text here, but this is faster
             // Generally updateUI should only be used when variables change in the background WITHOUT the control itself being touched
@@ -926,54 +975,157 @@ public sealed partial class MainWindow : Window
     }
 
 
+    /// <summary>
+    /// Picks a folder and reports every PBR texture in it that's still a byte-for-byte copy of
+    /// its own color texture — i.e. the templates nobody ever got around to painting.
+    /// </summary>
+    private async void AnalyzeTextureSetsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button) return;
+
+        string folder;
+        try
+        {
+            button.IsEnabled = false;
+
+            var picker = new Microsoft.Windows.Storage.Pickers.FolderPicker(button.XamlRoot.ContentIslandEnvironment.AppWindowId)
+            {
+                CommitButtonText = "Inspect this folder",
+                SuggestedStartLocation = (Microsoft.Windows.Storage.Pickers.PickerLocationId)PickerLocationId.Desktop,
+                ViewMode = (Microsoft.Windows.Storage.Pickers.PickerViewMode)PickerViewMode.Thumbnail,
+            };
+
+            var picked = await picker.PickSingleFolderAsync();
+            if (picked == null) return;
+
+            folder = picked.Path;
+        }
+        catch (Exception ex)
+        {
+            Trace.WriteLine(ex);
+            return;
+        }
+        finally
+        {
+            button.IsEnabled = true;
+        }
+
+        try
+        {
+            ToggleControls(this, false);
+            Log($"Inspecting texture sets in {folder}...", LogLevel.Lengthy);
+
+            _analysisCts?.Cancel();
+            _analysisCts?.Dispose();
+            _analysisCts = new CancellationTokenSource();
+
+            var report = await TextureSetAnalyzer.AnalyzeAsync(folder, _analysisCts.Token);
+
+            // The uncapped listing goes to trace so the sidebar stays readable even on a
+            // pack with thousands of texture sets.
+            Trace.WriteLine(TextureSetAnalyzer.BuildTraceReport(report));
+
+            if (report.JsonFilesFound == 0)
+            {
+                Log("No .texture_set.json files were found in that folder (subfolders included).", LogLevel.Warning);
+                return;
+            }
+
+            var level = report.FlaggedSets.Any() ? LogLevel.Warning : LogLevel.Success;
+            Log(TextureSetAnalyzer.BuildLogReport(report), level);
+        }
+        catch (OperationCanceledException)
+        {
+            Log("Texture set inspection cancelled.", LogLevel.Informational);
+        }
+        catch (Exception ex)
+        {
+            Log($"Error while inspecting texture sets: {ex.Message}", LogLevel.Error);
+            Trace.WriteLine(ex);
+        }
+        finally
+        {
+            ToggleControls(this, true);
+        }
+    }
+
+
 
     private void LogCopyButton_Click(object sender, RoutedEventArgs e)
     {
         try
         {
-            if (!string.IsNullOrEmpty(SidebarLog.Text))
+            var sb = new StringBuilder();
+
+            AppendSystemInfo(sb);
+
+            sb.AppendLine($"===== Sidebar Log (Last {MaxLogChars} Chars)");
+            string logSnapshot;
+            lock (_logGate) logSnapshot = LogText;
+            sb.AppendLine(logSnapshot.Replace(EntrySentinel, Environment.NewLine));
+            sb.AppendLine();
+
+            // Environment variables
+            sb.AppendLine("===== Environment Variables");
+            var fields = typeof(EnvironmentVariables).GetFields(BindingFlags.Public | BindingFlags.Static);
+            foreach (var field in fields)
             {
-                var sb = new StringBuilder();
-                // Original sidebar log (important status messages)
-                sb.AppendLine("===== Sidebar Log (UI-shown Messages)");
-                sb.AppendLine(SidebarLog.Text);
-                sb.AppendLine();
-                // Tuner variables
-                sb.AppendLine("===== Tuner Variables");
-                var fields = typeof(EnvironmentVariables).GetFields(BindingFlags.Public | BindingFlags.Static);
-                foreach (var field in fields)
-                {
-                    var value = field.GetValue(null);
-                    sb.AppendLine($"{field.Name}: {value ?? "null"}");
-                }
-                sb.AppendLine();
-                // Persistent variables
-                sb.AppendLine("===== Persistent Variables");
-                var persistentFields = typeof(EnvironmentVariables.Persistent).GetFields(BindingFlags.Public | BindingFlags.Static);
-                foreach (var field in persistentFields)
-                {
-                    var value = field.GetValue(null);
-                    sb.AppendLine($"{field.Name}: {value ?? "null"}");
-                }
-                sb.AppendLine();
-                // Trace logs
-                sb.AppendLine(TraceManager.GetAllTraceLogs());
+                var value = field.GetValue(null);
 
-                // UI Controls State
-                sb.AppendLine();
-                sb.AppendLine("===== UI Controls State");
-                CollectUIControlsState(sb);
+                if (value is System.Collections.IEnumerable enumerable && value is not string)
+                {
+                    var items = enumerable.Cast<object>().ToList();
+                    sb.AppendLine(items.Count == 0 ? $"{field.Name}: (empty)" : $"{field.Name}:");
+                    foreach (var item in items)
+                        sb.AppendLine($"  {FormatValue(item)}");
+                    continue;
+                }
 
-                var dataPackage = new DataPackage();
-                dataPackage.SetText(sb.ToString());
-                Clipboard.SetContent(dataPackage);
-                Log("Copied debug logs to clipboard.", LogLevel.Success);
+                sb.AppendLine($"{field.Name}: {value ?? "null"}");
             }
+            sb.AppendLine();
+
+            // Persistent variables
+            sb.AppendLine("===== Persistent Variables");
+            var persistentFields = typeof(Persistent).GetFields(BindingFlags.Public | BindingFlags.Static);
+            foreach (var field in persistentFields)
+            {
+                var value = field.GetValue(null);
+                sb.AppendLine($"{field.Name}: {value ?? "null"}");
+            }
+            sb.AppendLine();
+
+            // Trace logs
+            sb.AppendLine(TraceManager.GetAllTraceLogs());
+
+            // UI Controls State
+            sb.AppendLine();
+            sb.AppendLine("===== UI Controls State");
+            CollectUIControlsState(sb);
+
+            var dataPackage = new DataPackage();
+            dataPackage.SetText(sb.ToString());
+            Clipboard.SetContent(dataPackage);
+            Log("Copied debug logs to clipboard.", LogLevel.Success);
         }
         catch (Exception ex)
         {
             Log($"Error during debug log copy: {ex}", LogLevel.Error);
         }
+
+        static string FormatValue(object? value)
+        {
+            if (value is null) return "null";
+            if (value is System.Runtime.CompilerServices.ITuple tuple)
+            {
+                var items = new object?[tuple.Length];
+                for (var i = 0; i < tuple.Length; i++)
+                    items[i] = tuple[i]?.ToString() ?? "null";
+                return string.Join(", ", items);
+            }
+            return value.ToString() ?? "null";
+        }
+
         void CollectUIControlsState(StringBuilder sb)
         {
             var fields = this.GetType().GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
@@ -983,7 +1135,6 @@ public sealed partial class MainWindow : Window
                 var value = field.GetValue(this);
                 if (value == null) continue;
 
-                var type = value.GetType();
                 var name = field.Name;
 
                 // Toggle-type controls
@@ -1041,29 +1192,323 @@ public sealed partial class MainWindow : Window
                 }
             }
         }
+
+        static void AppendSystemInfo(StringBuilder sb)
+        {
+            sb.AppendLine("===== System Info");
+
+            // Process architecture = what's actually executing right now
+            sb.AppendLine($"Process Architecture: {RuntimeInformation.ProcessArchitecture}");
+            // OS architecture = the machine's native architecture (differs from above if running under emulation)
+            sb.AppendLine($"OS Architecture: {RuntimeInformation.OSArchitecture}");
+            sb.AppendLine($"Is Emulated (x64-on-ARM64): {RuntimeInformation.ProcessArchitecture != RuntimeInformation.OSArchitecture}");
+
+            sb.AppendLine($"OS Version: {RuntimeInformation.OSDescription}");
+            sb.AppendLine($".NET Runtime: {RuntimeInformation.FrameworkDescription}");
+
+            sb.AppendLine($"Processor Count: {Environment.ProcessorCount}");
+            sb.AppendLine($"Working Set: {Environment.WorkingSet / 1024 / 1024} MB");
+            sb.AppendLine($"64-bit OS: {Environment.Is64BitOperatingSystem}");
+            sb.AppendLine($"64-bit Process: {Environment.Is64BitProcess}");
+
+            try
+            {
+                var package = Windows.ApplicationModel.Package.Current;
+                var v = package.Id.Version;
+                sb.AppendLine($"Package Version: {v.Major}.{v.Minor}.{v.Build}.{v.Revision}");
+                sb.AppendLine($"Package Architecture: {package.Id.Architecture}");
+                sb.AppendLine($"Package Full Name: {package.Id.FullName}");
+            }
+            catch (Exception ex)
+            {
+                sb.AppendLine($"Package Info: unavailable ({ex.Message})");
+            }
+
+            try
+            {
+                sb.AppendLine($"UI Culture: {CultureInfo.CurrentUICulture.Name}");
+            }
+            catch { /* non-critical */ }
+
+            sb.AppendLine();
+        }
     }
 
     private void ProcessSubfoldersToggle_Toggled(object sender, RoutedEventArgs e)
     {
-        var toggle = sender as ToggleSwitch;
-        ProcessSubfolders = toggle.IsOn;
+        if (sender is ToggleSwitch toggle) ProcessSubfolders = toggle.IsOn;
     }
 
     private void SmartFiltersToggle_Toggled(object sender, RoutedEventArgs e)
     {
-        var toggle = sender as ToggleSwitch;
-        SmartFilters = toggle.IsOn;
+        if (sender is ToggleSwitch toggle) SmartFilters = toggle.IsOn;
     }
 
     private void ConvertToTGAToggle_Toggled(object sender, RoutedEventArgs e)
     {
-        var toggle = sender as ToggleSwitch;
-        ConvertToTarga = toggle.IsOn;
+        if (sender is ToggleSwitch toggle) ConvertToTarga = toggle.IsOn;
     }
 
     private void CreateBackupToggle_Toggled(object sender, RoutedEventArgs e)
     {
-        var toggle = sender as ToggleSwitch;
-        CreateBackup = toggle.IsOn;
+        if (sender is ToggleSwitch toggle) CreateBackup = toggle.IsOn;
     }
+
+    private void CreateNewFoldersToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ToggleSwitch toggle) return;
+
+        CreateNewFolders = toggle.IsOn;
+
+        if (CreateNewFolders && RuntimeFlags.Set("Explained_Create_New_Folders"))
+        {
+            Log($"Generated texture sets and templates will be collected in a \"{Generate.SecondaryPBRFolderName(SecondaryPBRMapType)}\" " +
+                "subfolder of each processed folder, rather than sitting next to the color textures.", LogLevel.Informational);
+        }
+    }
+
+
+    #region =============== UI LOGGER ===============
+
+    public enum LogLevel
+    {
+        Success, Informational, Warning, Error, Network, Lengthy, Debug, Report
+    }
+
+    // The single source of truth, Log() only ever writes here
+    internal static string LogText = "";
+    private static readonly Lock _logGate = new();
+
+    // Typewriter state, only ever touched on the UI thread, inside TypewriterTick().
+    // Logger writes fast; typewriter reveals it to the UI on its own schedule — always the
+    // oldest not-yet-shown entry first, left-to-right within it — so chronology holds up
+    // AND each message types start-to-finish instead of finish-to-start.
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _typewriterTimer;
+    private ScrollViewer? _logScrollViewer;
+    private int _settledLength = 0;   // trailing chars of LogText already fully shown & final
+    private int _activeRevealed = 0;  // chars revealed so far of the current (oldest-pending) entry
+    private string? _lastRenderedText;
+
+    private const int MaxLogChars = 4000;
+
+    private const double BaselineCharsPerTick = 2.0; // relaxed pace for small/no backlog
+    private const double CatchUpFraction = 0.10;     // reveal % of the backlog each tick
+    private static readonly int TickIntervalMs = ((Func<int>)(() => // speed based on corecount, since this really does affect cpu usage! it's the main lever
+    {
+        try
+        {
+            if (Windows.System.Power.PowerManager.EnergySaverStatus == Windows.System.Power.EnergySaverStatus.On)
+                return 64;
+
+            return Environment.ProcessorCount switch
+            {
+                >= 24 => 4,
+                >= 16 => 8,
+                >= 8 => 16,
+                >= 5 => 32,
+                _ => 64,
+            };
+        }
+        catch { return 16; }
+    }))();
+
+    // Structural marker ONLY — never rendered, never typed character-by-character
+    private const string EntrySentinel = "\uE000\uE001";
+
+    // Idle/typing cursor — sits at the current write-head
+    private const bool ShowTypingCursor = false;
+    private const int CursorBlinkMs = 750;
+    private const string CursorOnGlyph = " |";
+    private const string CursorOffGlyph = "  ";
+
+    /// <summary>
+    /// Thread-safe from anywhere: this only appends to a string behind a lock. Nothing here
+    /// touches the UI, so there's no dispatcher hop and no ordering surprise — the typewriter
+    /// picks the text up on its own schedule.
+    /// </summary>
+    public static void Log(string message, LogLevel? level = null)
+    {
+        var prefix = level switch
+        {
+            LogLevel.Success => "✅ ",
+            LogLevel.Informational => "ℹ️ ",
+            LogLevel.Warning => "⚠️ ",
+            LogLevel.Error => "❌ ",
+            LogLevel.Network => "🛜 ",
+            LogLevel.Lengthy => "⏳ ",
+            LogLevel.Report => "📋 ",
+            LogLevel.Debug => "🔍 ",
+            null => "",
+            _ => "💩 "
+        };
+
+        var entry = $"{prefix}{message}";
+
+        lock (_logGate)
+        {
+            if (!string.IsNullOrEmpty(LogText))
+            {
+                var firstSentinel = LogText.IndexOf(EntrySentinel, StringComparison.Ordinal);
+                var lastEntry = firstSentinel >= 0 ? LogText[..firstSentinel] : LogText;
+
+                if (lastEntry == entry) // identical to previous entry? drop it
+                    return;
+            }
+
+            LogText = string.IsNullOrEmpty(LogText) ? entry : $"{entry}{EntrySentinel}{LogText}";
+        }
+    }
+
+    private void InitializeLogTypewriter()
+    {
+        SidebarLog.Loaded += (_, _) => _logScrollViewer ??= GetScrollViewer(SidebarLog);
+        if (SidebarLog.IsLoaded) _logScrollViewer ??= GetScrollViewer(SidebarLog);
+
+        _typewriterTimer = DispatcherQueue.CreateTimer();
+        _typewriterTimer.Interval = TimeSpan.FromMilliseconds(TickIntervalMs);
+        _typewriterTimer.Tick += (_, _) => TypewriterTick();
+        _typewriterTimer.Start();
+    }
+
+    private void TypewriterTick()
+    {
+        if (_isClosing) return;
+
+        string current;
+        lock (_logGate)
+        {
+            current = LogText;
+
+            if (current.Length > MaxLogChars)
+            {
+                // Cut on a sentinel boundary so we drop whole oldest entries, never mid-message.
+                var cut = current.LastIndexOf(EntrySentinel, MaxLogChars - 1, MaxLogChars, StringComparison.Ordinal);
+                if (cut > 0)
+                {
+                    var trimmedAmount = current.Length - cut;
+                    current = current[..cut];
+                    LogText = current;
+
+                    // Trimmed content came off the tail — exactly where _settledLength measures
+                    // from — so shrink it by the same amount. If the cut reached into content that
+                    // wasn't fully settled yet (only possible under an extreme backlog), just reset
+                    // both — the next tick starts clean against the trimmed text.
+                    if (trimmedAmount > _settledLength)
+                    {
+                        _settledLength = 0;
+                        _activeRevealed = 0;
+                    }
+                    else
+                    {
+                        _settledLength -= trimmedAmount;
+                    }
+                }
+            }
+        }
+
+        var unshownLength = current.Length - _settledLength;
+
+        if (unshownLength > 0)
+        {
+            // The oldest not-yet-shown entry sits adjacent to the settled region. Its own
+            // trailing sentinel (connecting it to whatever follows) isn't a real boundary
+            // between two DIFFERENT pending entries, so exclude it before searching.
+            var trailingConnector = _settledLength > 0 ? EntrySentinel.Length : 0;
+            var searchLength = Math.Max(0, unshownLength - trailingConnector);
+
+            var sepIndex = searchLength > 0
+                ? current.LastIndexOf(EntrySentinel, searchLength - 1, searchLength, StringComparison.Ordinal)
+                : -1;
+
+            var activeStart = sepIndex >= 0 ? sepIndex + EntrySentinel.Length : 0;
+            var activeTextLength = searchLength - activeStart; // entry's OWN text only, sentinel excluded
+
+            var remaining = unshownLength - _activeRevealed; // whole backlog left — drives speed-up
+            var charsThisTick = (int)Math.Max(BaselineCharsPerTick, Math.Ceiling(remaining * CatchUpFraction));
+
+            _activeRevealed = Math.Min(activeTextLength, _activeRevealed + charsThisTick);
+            _activeRevealed = SnapForward(current, activeStart, _activeRevealed);
+
+            if (_activeRevealed >= activeTextLength)
+            {
+                // Entry fully typed — fold it (and its sentinel, converted to a real blank
+                // line) into settled INSTANTLY. The separator is never itself "typed."
+                _settledLength = current.Length - activeStart;
+                _activeRevealed = 0;
+
+                SidebarLog.UpdateLayout();
+                _logScrollViewer?.ChangeView(null, 0, null, true); // once, per finished entry
+            }
+            else
+            {
+                RenderFrame(current, activeStart, _activeRevealed);
+                return;
+            }
+        }
+
+        RenderFrame(current, 0, 0);
+    }
+
+    private void RenderFrame(string current, int activeStart, int activeRevealed)
+    {
+        var revealedPrefix = activeRevealed > 0 ? current.Substring(activeStart, activeRevealed) : "";
+        var settledDisplay = _settledLength > 0
+            ? current.Substring(current.Length - _settledLength).Replace(EntrySentinel, "\n\n")
+            : "";
+
+        string headText, tailText;
+        if (revealedPrefix.Length > 0)
+        {
+            headText = revealedPrefix;
+            tailText = settledDisplay.Length > 0 ? "\n\n" + settledDisplay : "";
+        }
+        else
+        {
+            var firstBoundary = settledDisplay.IndexOf("\n\n", StringComparison.Ordinal);
+            headText = firstBoundary >= 0 ? settledDisplay[..firstBoundary] : settledDisplay;
+            tailText = firstBoundary >= 0 ? settledDisplay[firstBoundary..] : "";
+        }
+
+        var cursor = ShowTypingCursor
+            ? ((Environment.TickCount64 / CursorBlinkMs) % 2 == 0 ? CursorOnGlyph : CursorOffGlyph)
+            : "";
+
+        var newText = headText + cursor + tailText;
+        if (newText == _lastRenderedText) return; // nothing visually changed, skip the relayout entirely
+
+        _lastRenderedText = newText;
+        SidebarLog.Text = newText;
+    }
+
+    // Never reveal a cut that splits a surrogate pair or strands an emoji's
+    // variation-selector/combining mark — grows past them instead of stopping mid-glyph.
+    private static int SnapForward(string s, int rangeStart, int localIndex)
+    {
+        var i = rangeStart + localIndex;
+        if (i <= rangeStart || i >= s.Length) return localIndex;
+
+        if (char.IsHighSurrogate(s[i - 1]) && char.IsLowSurrogate(s[i]))
+            i++;
+
+        while (i < s.Length && IsJoiningMark(s[i]))
+            i++;
+
+        return i - rangeStart;
+    }
+    private static bool IsJoiningMark(char c) =>
+        c is '\uFE0F' or '\uFE0E' ||
+        CharUnicodeInfo.GetUnicodeCategory(c) is UnicodeCategory.NonSpacingMark or UnicodeCategory.EnclosingMark;
+
+    public static ScrollViewer? GetScrollViewer(DependencyObject obj)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(obj); i++)
+        {
+            var child = VisualTreeHelper.GetChild(obj, i);
+            if (child is ScrollViewer sv) return sv;
+            var result = GetScrollViewer(child);
+            if (result != null) return result;
+        }
+        return null;
+    }
+    #endregion
 }

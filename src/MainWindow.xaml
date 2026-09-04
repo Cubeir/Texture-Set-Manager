@@ -47,9 +47,9 @@
                 VerticalAlignment="Stretch"
                 IsHitTestVisible="False"
                 Visibility="{ThemeResource LightThemeBackgroundVisibility}"
-                Canvas.ZIndex="-1">
+                Canvas.ZIndex="-999">
             <Border.Background>
-                <SolidColorBrush Color="#2B373737" />
+                <SolidColorBrush Color="#20373737" />
             </Border.Background>
         </Border>
 
@@ -69,19 +69,20 @@
                     BorderBrush="{ThemeResource HyperlinkButtonBorderThemeBrush}"
                     BorderThickness="0,0,0,6"
                     CornerRadius="0"
-                    Translation="0,0,24"
+                    Translation="0,0,32"
                     IsHitTestVisible="False">
                 <Border.Shadow>
                     <ThemeShadow x:Name="TitleBarShadow" />
                 </Border.Shadow>
             </Border>
 
-            <!-- Transparent drag area: covers whole titlebar except left 200px so your buttons keep receiving clicks -->
+            <!-- Transparent drag area: starts past the titlebar buttons so they keep receiving clicks -->
             <Border x:Name="TitleBarDragArea"
-                    Margin="145,0,0,0"
-                    Height="31"
+                    Margin="197,-1,0,0"
+                    Height="32"
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Top"
+                    BorderThickness="0"
                     Background="Transparent"
                     IsHitTestVisible="False" />
         </Grid>
@@ -96,35 +97,42 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Canvas Grid.Column="0"
-                    Height="20"
-                    Width="20"
-                    VerticalAlignment="Center"
-                    Margin="0,0,8,0"
-                    CacheMode="BitmapCache"
-                    Canvas.ZIndex="1">
+            <!-- A Grid rather than a Canvas so the image is laid out dead-center of its own
+                 box; combined with RenderTransformOrigin 0.5,0.5 the spin axis is the exact
+                 middle of the icon at any size or DPI. BitmapCache is deliberately absent:
+                 caching rasterizes once and then transforms that snapshot, which is what made
+                 the logo look like it sagged off-axis once it picked up speed. -->
+            <Grid Grid.Column="0"
+                  Height="20"
+                  Width="20"
+                  VerticalAlignment="Center"
+                  Margin="0,1,8,0"
+                  Canvas.ZIndex="1">
 
                 <!-- icon -->
                 <Image x:Name="iconImageBox"
                        Source="ms-appx:///Assets/icon.png"
                        Height="20"
                        Width="20"
-                       Canvas.Top="1"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
                        Opacity="1.0"
+                       RenderTransformOrigin="0.5,0.5"
                        Canvas.ZIndex="3"
-                       IsHitTestVisible="False"
-                       CacheMode="BitmapCache" />
-            </Canvas>
+                       IsHitTestVisible="False" />
+            </Grid>
 
             <TextBlock x:Name="TitleBarText"
                        Text="Texture Set Manager"
                        Grid.Column="1"
-                       Margin="0,6,0,5"
+                       FontSize="14"
+                       Margin="0,7,0,5"
                        VerticalAlignment="Center"
                        Canvas.ZIndex="0"
-                       FontWeight="Normal"
+                       FontWeight="Medium"
                        IsTextScaleFactorEnabled="False"
-                       IsHitTestVisible="False" />
+                       ToolTipService.ToolTip="Version: Unknown"
+                       IsHitTestVisible="True" />
         </Grid>
 
 
@@ -159,12 +167,15 @@
                         <ColumnDefinition Width="Auto" />
                         <!-- Button -->
                         <ColumnDefinition Width="Auto" />
+                        <!-- Separator -->
+                        <ColumnDefinition Width="Auto" />
+                        <!-- Button -->
                     </Grid.ColumnDefinitions>
 
                     <!-- Chat Button -->
                     <Button x:Name="ChatButton"
                             Grid.Column="0"
-                            FontFamily="Segoe Fluent Icons"
+                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
                             Style="{ThemeResource SubtleButtonStyle}"
                             Content="&#xE8F2;"
                             Width="42"
@@ -186,7 +197,7 @@
                     <!-- Donate Button -->
                     <Button x:Name="DonateButton"
                             Grid.Column="2"
-                            FontFamily="Segoe Fluent Icons"
+                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
                             Style="{StaticResource SubtleButtonStyle}"
                             Content="&#xEB51;"
                             Width="42"
@@ -211,7 +222,7 @@
                     <!-- Theme Button -->
                     <Button x:Name="CycleThemeButton"
                             Grid.Column="4"
-                            FontFamily="Segoe Fluent Icons"
+                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
                             Style="{StaticResource SubtleButtonStyle}"
                             Content="&#xEC46;"
                             Width="42"
@@ -222,6 +233,28 @@
                             BorderBrush="Transparent"
                             Click="CycleThemeButton_Click"
                             ToolTipService.ToolTip="Theme: System"
+                            IsTextScaleFactorEnabled="False" />
+
+                    <!-- Separator -->
+                    <Border Grid.Column="5"
+                            Width="1"
+                            Margin="4,6,4,6"
+                            Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                    <!-- Texture Set Report Button -->
+                    <Button x:Name="AnalyzeTextureSetsButton"
+                            Grid.Column="6"
+                            FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                            Style="{StaticResource SubtleButtonStyle}"
+                            Content="&#xE9D9;"
+                            Width="42"
+                            Height="35"
+                            CornerRadius="0"
+                            FontSize="16"
+                            Background="Transparent"
+                            BorderBrush="Transparent"
+                            Click="AnalyzeTextureSetsButton_Click"
+                            ToolTipService.ToolTip="Inspect a folder's texture sets and report every PBR texture that is still identical to its color texture (most likely an untouched template)."
                             IsTextScaleFactorEnabled="False" />
                 </Grid>
             </Border>
@@ -444,7 +477,10 @@
                             </ToggleButton.ContentTemplate>
                         </ToggleButton>
 
-                        <!-- Overlay borders for the visual split -->
+                        <!-- Overlay borders for the visual split. Both edges of this seam belong
+                             to the Subsurface Scattering button and are driven together from code
+                             (ApplySSSBevelColors) so they accent when it's checked, dim when it's
+                             disabled, and follow the theme. -->
                         <!-- Dark border on RIGHT edge of left button -->
                         <Grid Grid.Column="0"
                               HorizontalAlignment="Right"
@@ -453,7 +489,8 @@
                               IsHitTestVisible="False">
                             <Rectangle Fill="{ThemeResource ButtonBackgroundThemeBrush}" />
                             <Border BorderBrush="{ThemeResource FakeSplitButtonDarkBorderColor}"
-                                    BorderThickness="3,0,0,0" />
+                                    BorderThickness="3,0,0,0"
+                                    x:Name="DarkEdgeOfSSSButton" />
                         </Grid>
 
                         <!-- Bright border on LEFT edge of right button -->
@@ -479,6 +516,7 @@
                         <ColumnDefinition Width="1*" />
                         <ColumnDefinition Width="1*" />
                         <ColumnDefinition Width="1*" />
+                        <ColumnDefinition Width="1.25*" />
                     </Grid.ColumnDefinitions>
 
                     <ToggleSwitch x:Name="ProcessSubfoldersToggle"
@@ -523,6 +561,17 @@
                                   OffContent=""
                                   OnContent=""
                                   Toggled="CreateBackupToggle_Toggled"
+                                  IsTextScaleFactorEnabled="False" />
+
+                    <ToggleSwitch x:Name="CreateNewFoldersToggle"
+                                  Margin="4"
+                                  Grid.Column="4"
+                                  Header="Create new folders"
+                                  ToolTipService.ToolTip="Enable to collect the generated texture set JSONs and PBR templates in a new subfolder next to each processed folder (Heightmaps-PBR, Normals-PBR or None-PBR, depending on the secondary PBR texture) instead of writing them alongside the color textures."
+                                  IsOn="False"
+                                  OffContent=""
+                                  OnContent=""
+                                  Toggled="CreateNewFoldersToggle_Toggled"
                                   IsTextScaleFactorEnabled="False" />
                 </Grid>
 

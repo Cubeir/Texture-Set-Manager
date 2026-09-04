@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
 
 namespace Texture_Set_Manager.Core;
-
-// TODO: change the color of little green thing next to preview button
-// similar to how you do it in mainwindow with theme changes etc... (that fucky piece of code)
 
 /// <summary>
 /// Universal control toggle utility for WinUI 3 applications
@@ -15,146 +15,136 @@ namespace Texture_Set_Manager.Core;
 /// </summary>
 public class WindowControlsManager
 {
-    // Global exclusion list - controls with these names are always ignored
     private static readonly HashSet<string> _globalExclusions = new()
-        {
-            "DonateButton",
-            "ChatButton",
-            "CycleThemeButton",
-            "SidebarLog",
-        };
+    {
+        "DonateButton", "ChatButton", "CycleThemeButton", "SidebarLog",
+    };
 
-    // Static dictionary to track states for multiple windows
-    private static readonly Dictionary<Window, Dictionary<Control, bool>> _windowStates = new();
+    // Reference-counted lock state, keyed by control INSTANCE (identity-based dictionary —
+    // Control doesn't override Equals/GetHashCode, so this is safe). A control's IsEnabled is
+    // restored only once its lock count returns to zero, so overlapping disable sessions can
+    // no longer stomp on each other.
+    private static readonly Dictionary<Control, int> _lockCounts = new();
+    private static readonly Dictionary<Control, bool> _preLockState = new();
 
     /// <summary>
-    /// Toggles all supported controls within the specified window
+    /// Blanket mode: disable every supported control in the window EXCEPT the named ones
+    /// (plus global exclusions). Use for "lock the whole window down" operations.
     /// </summary>
-    /// <param name="window">The window containing controls to toggle</param>
-    /// <param name="enable">True to restore original states, false to disable all</param>
-    ///<param name="overrideExclusions">True to override the global ones with the manual exclusion list, otherwise they get compounded
-    /// <param name="excludeNames">Optional list of control names to exclude from toggling</param>
     public static void ToggleControls(Window window, bool enable, bool overrideGlobalExclusions = false, params string[] excludeNames)
     {
-        if (window?.Content == null) return;
+        if (window == null) return;
+        var content = TryGetContent(window);
+        if (content == null) return;
 
-        EnsureWindowStateExists(window);
-        var states = _windowStates[window];
-
-        HashSet<string> exclusions;
-
-        if (overrideGlobalExclusions)
-        {
-            // Use only the provided excludeNames, ignore global exclusions
-            exclusions = new HashSet<string>();
-        }
-        else
-        {
-            // Start with global exclusions (default behavior)
-            exclusions = new HashSet<string>(_globalExclusions);
-        }
-
-        // Add any additional exclusions
+        var exclusions = overrideGlobalExclusions ? new HashSet<string>() : new HashSet<string>(_globalExclusions);
         if (excludeNames != null)
-        {
             foreach (var name in excludeNames)
-            {
-                if (!string.IsNullOrEmpty(name))
-                    exclusions.Add(name);
-            }
-        }
+                if (!string.IsNullOrEmpty(name)) exclusions.Add(name);
 
-        if (enable)
-        {
-            RestoreControlStates(states);
-        }
-        else
-        {
-            StoreAndDisableControls(window, states, exclusions);
-        }
+        Apply(enable, GetAllSupportedControls(content, exclusions));
     }
 
-
     /// <summary>
-    /// Adds a control name to the global exclusion list
+    /// Targeted mode: disable/enable ONLY the named controls (global exclusions still apply
+    /// as a safety net).
     /// </summary>
-    /// <param name="controlName">Name of the control to always exclude</param>
-    public static void AddGlobalExclusion(string controlName)
+    public static void ToggleSpecificControls(Window window, bool enable, params string[] controlNames)
     {
-        if (!string.IsNullOrEmpty(controlName))
+        if (window == null || controlNames == null || controlNames.Length == 0) return;
+        var content = TryGetContent(window);
+        if (content == null) return;
+
+        var wanted = new HashSet<string>(controlNames);
+        wanted.ExceptWith(_globalExclusions);
+
+        var controls = GetAllSupportedControls(content, null).Where(c => wanted.Contains(c.Name));
+        Apply(enable, controls);
+    }
+
+    // Window.Content throws COMException instead of returning null once the native window has
+    // been torn down (e.g. a callback fires through a captured "this" after close). Swallow
+    // that specific case — there's nothing left to toggle on a dead window — but let anything
+    // else bubble up.
+    private static UIElement? TryGetContent(Window window)
+    {
+        try
         {
-            _globalExclusions.Add(controlName);
+            return window.Content;
+        }
+        catch (COMException)
+        {
+            return null;
         }
     }
 
     /// <summary>
-    /// Removes a control name from the global exclusion list
+    /// Emergency reset — force-clears every lock on every control in the window regardless of
+    /// count. Not part of normal flow; use only if a window can be torn down without its
+    /// Closed handler running (crash, forced termination, etc).
     /// </summary>
-    /// <param name="controlName">Name of the control to remove from exclusions</param>
-    public static void RemoveGlobalExclusion(string controlName)
-    {
-        if (!string.IsNullOrEmpty(controlName))
-        {
-            _globalExclusions.Remove(controlName);
-        }
-    }
-
-    /// <summary>
-    /// Clears all global exclusions
-    /// </summary>
-    public static void ClearGlobalExclusions()
-    {
-        _globalExclusions.Clear();
-    }
-
-    /// <summary>
-    /// Clears stored states for a window (useful for cleanup)
-    /// </summary>
-    /// <param name="window">The window to clear states for</param>
     public static void ClearStates(Window window)
     {
-        if (window != null && _windowStates.ContainsKey(window))
+        var content = window == null ? null : TryGetContent(window);
+        if (content == null) return;
+
+        foreach (var control in GetAllSupportedControls(content, null).ToList())
         {
-            _windowStates[window].Clear();
-            _windowStates.Remove(window);
+            if (_lockCounts.Remove(control) && _preLockState.Remove(control, out var original))
+                control.IsEnabled = original;
         }
     }
 
-    private static void EnsureWindowStateExists(Window window)
+    private static void Apply(bool enable, IEnumerable<Control> controls)
     {
-        if (!_windowStates.ContainsKey(window))
-        {
-            _windowStates[window] = new Dictionary<Control, bool>();
-        }
+        var list = controls as IList<Control> ?? controls.ToList(); // materialize before mutating
+        if (enable) Release(list); else Acquire(list);
     }
 
-    private static void StoreAndDisableControls(Window window, Dictionary<Control, bool> states, HashSet<string> exclusions)
+    private static void Acquire(IEnumerable<Control> controls)
     {
-        states.Clear();
-        var controls = GetAllSupportedControls(window.Content, exclusions);
-
         foreach (var control in controls)
         {
-            states[control] = control.IsEnabled;
-            control.IsEnabled = false;
+            _lockCounts.TryGetValue(control, out var count);
+            if (count == 0)
+            {
+                _preLockState[control] = control.IsEnabled;
+                control.IsEnabled = false;
+            }
+            _lockCounts[control] = count + 1;
         }
     }
 
-    private static void RestoreControlStates(Dictionary<Control, bool> states)
+    private static void Release(IEnumerable<Control> controls)
     {
-        foreach (var kvp in states)
+        foreach (var control in controls)
         {
-            kvp.Key.IsEnabled = kvp.Value;
+            if (!_lockCounts.TryGetValue(control, out var count) || count <= 0)
+                continue; // never locked / already released — ignore stray release, don't go negative
+
+            count--;
+            if (count == 0)
+            {
+                _lockCounts.Remove(control);
+                if (_preLockState.Remove(control, out var original))
+                    control.IsEnabled = original;
+            }
+            else
+            {
+                _lockCounts[control] = count;
+            }
         }
-        states.Clear();
     }
 
-    private static IEnumerable<Control> GetAllSupportedControls(DependencyObject parent, HashSet<string>? exclusions = null)
+    public static void AddGlobalExclusion(string controlName) { if (!string.IsNullOrEmpty(controlName)) _globalExclusions.Add(controlName); }
+    public static void RemoveGlobalExclusion(string controlName) { if (!string.IsNullOrEmpty(controlName)) _globalExclusions.Remove(controlName); }
+    public static void ClearGlobalExclusions() => _globalExclusions.Clear();
+
+    private static IEnumerable<Control> GetAllSupportedControls(DependencyObject parent, HashSet<string>? exclusions)
     {
         if (parent == null) yield break;
 
         var childCount = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(parent);
-
         for (var i = 0; i < childCount; i++)
         {
             var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(parent, i);
@@ -162,42 +152,37 @@ public class WindowControlsManager
             if (IsSupportedControl(child))
             {
                 var control = (Control)child;
-
-                // Check if this control should be excluded
                 if (exclusions == null || !exclusions.Contains(control.Name))
-                {
                     yield return control;
-                }
             }
 
             foreach (var grandChild in GetAllSupportedControls(child, exclusions))
-            {
                 yield return grandChild;
-            }
         }
     }
 
-    private static bool IsSupportedControl(DependencyObject control)
+    private static bool IsSupportedControl(DependencyObject control) =>
+        control is Button or CheckBox or RadioButton or Slider or TextBox or PasswordBox or ComboBox or
+        ListBox or ListView or Microsoft.UI.Xaml.Controls.Primitives.ToggleButton or RatingControl or
+        NumberBox or DatePicker or TimePicker or ToggleSwitch or MenuFlyoutItem or AppBarButton or
+        AppBarToggleButton or AutoSuggestBox;
+
+    /// <summary>
+    /// Activates a freshly-launched window, then re-asserts activation ~500ms later
+    /// (Windows' default double-click interval) as a guard: without this, the second
+    /// click of the double-click that launched this window could land back on the
+    /// caller before the new window's HWND fully took over that screen region,
+    /// unintentionally bringing the caller back to the foreground.
+    /// </summary>
+    public static void Activate(Window window, int guardDelayMs = 500)
     {
-        return control is Button ||
-               control is CheckBox ||
-               control is RadioButton ||
-               control is Slider ||
-               control is TextBox ||
-               control is PasswordBox ||
-               control is ComboBox ||
-               control is ListBox ||
-               control is ListView ||
-               control is ToggleButton ||
-               control is RatingControl ||
-               control is NumberBox ||
-               control is DatePicker ||
-               control is TimePicker ||
-               control is ToggleSwitch ||
-               control is MenuFlyoutItem ||
-               control is AppBarButton ||
-               control is AppBarToggleButton ||
-               control is AutoSuggestBox;
+        window.Activate();
+
+        _ = window.DispatcherQueue.TryEnqueue(async () =>
+        {
+            await Task.Delay(guardDelayMs);
+            try { window.Activate(); } catch { /* window may already be closed */ }
+        });
     }
 }
 
@@ -207,20 +192,16 @@ public class WindowControlsManager
 public static class WindowControlsManagerExtensions
 {
     /// <summary>
-    /// Toggles all controls in this window
+    /// Disables all controls in this window
     /// </summary>
-    /// <param name="window">The window to toggle controls for</param>
-    /// <param name="enable">True to restore, false to disable</param>
-    /// <param name="excludeNames">Optional list of control names to exclude</param>
     public static void DisableAllControls(this Window window, bool overrideGlobalExclusions = false, params string[] excludeNames)
     {
         WindowControlsManager.ToggleControls(window, false, overrideGlobalExclusions, excludeNames);
     }
+
     /// <summary>
-    /// Disables all controls in this window
+    /// Enables all controls in this window
     /// </summary>
-    /// <param name="window">The window to disable controls for</param>
-    /// <param name="excludeNames">Optional list of control names to exclude</param>
     public static void EnableAllControls(this Window window, bool overrideGlobalExclusions = false, params string[] excludeNames)
     {
         WindowControlsManager.ToggleControls(window, true, overrideGlobalExclusions, excludeNames);
@@ -229,7 +210,6 @@ public static class WindowControlsManagerExtensions
     /// <summary>
     /// Restores all controls in this window to their original states
     /// </summary>
-    /// <param name="window">The window to restore controls for</param>
     public static void RestoreAllControls(this Window window)
     {
         WindowControlsManager.ToggleControls(window, true);
@@ -238,50 +218,47 @@ public static class WindowControlsManagerExtensions
     /// <summary>
     /// Clears stored control states for this window
     /// </summary>
-    /// <param name="window">The window to clear states for</param>
     public static void ClearControlStates(this Window window)
     {
         WindowControlsManager.ClearStates(window);
     }
 }
 
-// TODO: Just marking it, come here and check this out
 /// <summary>
-/// This shouldn't really be here, a utility class for managing a simple progress bar on/off while preventing race conditions
-/// Update it later to use a more robust solution like IProgress<T> or async/await patterns, show real time progress, etc.
-/// In fact, remove the thing entirely, you've already got the lamp to show "something is going on" this is just VISUAL CLUTTER
+/// Utility class for driving a WinUI ProgressBar safely from background threads. All public
+/// methods are safe to call from any thread; UI mutation is always marshalled onto the
+/// ProgressBar's DispatcherQueue.
 /// </summary>
 public class ProgressBarManager
 {
     private readonly ProgressBar _progressBar;
-    private int _activeOperations = 0;
+    private readonly DispatcherQueue _dispatcherQueue;
     private readonly object _lock = new();
+    private int _activeOperations;
 
     public ProgressBarManager(ProgressBar progressBar)
     {
         _progressBar = progressBar ?? throw new ArgumentNullException(nameof(progressBar));
-
-        // Initialize to hidden state
-        _progressBar.IsIndeterminate = false;
-        _progressBar.Visibility = Visibility.Collapsed;
+        _dispatcherQueue = progressBar.DispatcherQueue;
+        ResetVisual();
     }
 
     /// <summary>
-    /// Shows the progress bar. Call this when starting a long-running operation.
-    /// Multiple calls are safe - progress bar stays visible until all operations complete.
+    /// Shows the progress bar in indeterminate mode. Multiple calls are safe — the bar stays
+    /// visible until all operations complete.
     /// </summary>
     public void ShowProgress()
     {
         lock (_lock)
         {
             _activeOperations++;
-            UpdateProgressBarState();
+            UpdateIndeterminateState();
         }
     }
 
     /// <summary>
-    /// Hides the progress bar. Call this when completing a long-running operation.
-    /// Progress bar only hides when all operations have completed.
+    /// Hides the progress bar. Only hides once every ShowProgress() call has a matching
+    /// HideProgress() call.
     /// </summary>
     public void HideProgress()
     {
@@ -290,60 +267,90 @@ public class ProgressBarManager
             if (_activeOperations > 0)
             {
                 _activeOperations--;
-                UpdateProgressBarState();
+                UpdateIndeterminateState();
             }
         }
     }
 
-    /// <summary>
-    /// Forces the progress bar to hide regardless of active operations count.
-    /// Use sparingly, typically only for error handling or app shutdown.
-    /// </summary>
+    /// <summary>Forces the progress bar to hide regardless of active operation count.</summary>
     public void ForceHide()
     {
         lock (_lock)
         {
             _activeOperations = 0;
-            UpdateProgressBarState();
+            UpdateIndeterminateState();
         }
     }
 
-    /// <summary>
-    /// Gets whether the progress bar is currently visible.
-    /// </summary>
     public bool IsVisible
     {
-        get
-        {
-            lock (_lock)
-            {
-                return _activeOperations > 0;
-            }
-        }
+        get { lock (_lock) { return _activeOperations > 0; } }
     }
 
-    /// <summary>
-    /// Gets the current number of active operations.
-    /// </summary>
     public int ActiveOperationsCount
     {
-        get
-        {
-            lock (_lock)
-            {
-                return _activeOperations;
-            }
-        }
+        get { lock (_lock) { return _activeOperations; } }
     }
 
-    private void UpdateProgressBarState()
+    /// <summary>Shows the built-in WinUI "error" tint, e.g. after an exception.</summary>
+    public void ReportError()
+    {
+        RunOnUi(() =>
+        {
+            _progressBar.IsIndeterminate = false;
+            _progressBar.ShowPaused = false;
+            _progressBar.ShowError = true;
+            _progressBar.Visibility = Visibility.Visible;
+        });
+    }
+
+    /// <summary>Shows the built-in WinUI "paused" tint, used here for user-initiated cancellation.</summary>
+    public void ReportCancelled()
+    {
+        RunOnUi(() =>
+        {
+            _progressBar.IsIndeterminate = false;
+            _progressBar.ShowError = false;
+            _progressBar.ShowPaused = true;
+            _progressBar.Visibility = Visibility.Visible;
+        });
+    }
+
+    /// <summary>Marks the bar complete and hides it (success path).</summary>
+    public void Complete() => RunOnUi(ResetVisual);
+
+    private void UpdateIndeterminateState()
     {
         var shouldShow = _activeOperations > 0;
+        RunOnUi(() =>
+        {
+            _progressBar.ShowError = false;
+            _progressBar.ShowPaused = false;
+            _progressBar.IsIndeterminate = shouldShow;
+            _progressBar.Visibility = shouldShow ? Visibility.Visible : Visibility.Collapsed;
+        });
+    }
 
-        _progressBar.IsIndeterminate = shouldShow;
-        _progressBar.Visibility = shouldShow ? Visibility.Visible : Visibility.Collapsed;
+    private void ResetVisual()
+    {
+        _progressBar.IsIndeterminate = false;
+        _progressBar.ShowError = false;
+        _progressBar.ShowPaused = false;
+        _progressBar.Minimum = 0;
+        _progressBar.Maximum = 100;
+        _progressBar.Value = 0;
+        _progressBar.Visibility = Visibility.Collapsed;
+    }
+
+    private void RunOnUi(Action action)
+    {
+        if (_dispatcherQueue.HasThreadAccess)
+            action();
+        else
+            _dispatcherQueue.TryEnqueue(() => action());
     }
 }
+
 public static class ProgressBarExtensions
 {
     private static readonly Dictionary<ProgressBar, ProgressBarManager> _managers = new();
@@ -364,24 +371,15 @@ public static class ProgressBarExtensions
     /// <summary>
     /// Shows progress on this ProgressBar. Thread-safe and handles multiple concurrent operations.
     /// </summary>
-    public static void ShowProgress(this ProgressBar progressBar)
-    {
-        progressBar.GetManager().ShowProgress();
-    }
+    public static void ShowProgress(this ProgressBar progressBar) => progressBar.GetManager().ShowProgress();
 
     /// <summary>
     /// Hides progress on this ProgressBar. Only hides when all operations complete.
     /// </summary>
-    public static void HideProgress(this ProgressBar progressBar)
-    {
-        progressBar.GetManager().HideProgress();
-    }
+    public static void HideProgress(this ProgressBar progressBar) => progressBar.GetManager().HideProgress();
 
     /// <summary>
     /// Forces the ProgressBar to hide regardless of active operations.
     /// </summary>
-    public static void ForceHideProgress(this ProgressBar progressBar)
-    {
-        progressBar.GetManager().ForceHide();
-    }
+    public static void ForceHideProgress(this ProgressBar progressBar) => progressBar.GetManager().ForceHide();
 }
