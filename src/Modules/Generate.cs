@@ -386,7 +386,7 @@ public static class Generate
     {
         "normalmap" => "Normals-PBR",
         "heightmap" => "Heightmaps-PBR",
-        _ => "None-PBR"
+        _ => "Flat-PBR"
     };
 
     /// <summary>

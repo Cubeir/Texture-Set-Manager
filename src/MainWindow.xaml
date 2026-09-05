@@ -591,7 +591,7 @@
                                   Margin="4"
                                   Grid.Column="4"
                                   Header="Create new folders"
-                                  ToolTipService.ToolTip="Enable to collect the generated texture set JSONs and PBR templates in a new subfolder next to each processed folder (Heightmaps-PBR, Normals-PBR or None-PBR, depending on the secondary PBR texture) instead of writing them alongside the color textures."
+                                  ToolTipService.ToolTip="Enable to collect the generated texture set JSONs and PBR templates in a new subfolder next to each processed folder (Heightmaps-PBR, Normals-PBR or Flat-PBR, depending on the secondary PBR texture) instead of writing them alongside the color textures."
                                   IsOn="False"
                                   OffContent=""
                                   OnContent=""
