@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -22,6 +21,27 @@ public static class ReportDialog
 {
     public sealed record Link(string Text, string Uri);
 
+    /// <summary>
+    /// Room a ContentDialog needs for its own chrome — title, padding, and the pinned button
+    /// row — before any of the height is available to content. Deliberately generous: guessing
+    /// too high costs a little scrolling, guessing too low puts controls off-screen.
+    /// </summary>
+    private const double DialogChromeHeight = 220;
+
+    /// <summary>
+    /// The most vertical space content may take, given how tall the window actually is right
+    /// now. Anything beyond this scrolls.
+    /// </summary>
+    private static double AvailableContentHeight(XamlRoot xamlRoot, double preferredMax)
+    {
+        var windowHeight = xamlRoot.Size.Height;
+
+        // A tiny window still has to show something; 120px of content plus the pinned buttons
+        // remains usable, and the ScrollViewer takes care of the rest.
+        var usable = Math.Max(120, windowHeight - DialogChromeHeight);
+        return Math.Min(preferredMax, usable);
+    }
+
     public static async Task ShowAsync(
         XamlRoot? xamlRoot,
         ElementTheme theme,
@@ -32,7 +52,7 @@ public static class ReportDialog
         string closeButtonText = "Close",
         string? linksHeader = null,
         IReadOnlyList<Link>? links = null,
-        double bodyMaxHeight = 260)
+        double contentMaxHeight = 420)
     {
         if (xamlRoot == null) return;
 
@@ -69,64 +89,66 @@ public static class ReportDialog
 
         // Monospaced so paths and columns line up; selectable so the user can grab one line
         // instead of the whole report when that's all they need.
-        var bodyBlock = new TextBlock
+        panel.Children.Add(new TextBlock
         {
             Text = body,
             FontFamily = new FontFamily("Consolas"),
             FontSize = 12,
             IsTextSelectionEnabled = true,
             TextWrapping = TextWrapping.Wrap
-        };
-
-        panel.Children.Add(new ScrollViewer
-        {
-            Content = bodyBlock,
-            MaxHeight = bodyMaxHeight,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
         });
 
-        var copyButton = new Button
+        // Everything scrolls together inside a height the current window can actually show.
+        // Previously only the body scrolled and the buttons lived in the content, so on a short
+        // window the dialog simply grew past the bottom of the screen and the close button became
+        // unreachable with nothing to scroll — the user had to resize the window to escape.
+        var scroller = new ScrollViewer
         {
-            Content = copyButtonText,
-            HorizontalAlignment = HorizontalAlignment.Stretch
+            Content = panel,
+            MaxHeight = AvailableContentHeight(xamlRoot, contentMaxHeight),
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
-        panel.Children.Add(copyButton);
 
-        var dismissButton = new Button
-        {
-            Content = closeButtonText,
-            HorizontalAlignment = HorizontalAlignment.Stretch
-        };
-        panel.Children.Add(dismissButton);
-
+        // Copy and Close are the dialog's own buttons rather than content: ContentDialog pins its
+        // button row, so they can never be scrolled or pushed out of reach however small the
+        // window gets or however long the report is.
         var dialog = new ContentDialog
         {
             Title = title,
-            Content = panel,
+            Content = scroller,
+            PrimaryButtonText = copyButtonText,
+            CloseButtonText = closeButtonText,
+            DefaultButton = ContentDialogButton.Close,
             XamlRoot = xamlRoot,
             RequestedTheme = theme
         };
 
-        copyButton.Click += async (_, _) =>
+        dialog.PrimaryButtonClick += (sender, args) =>
         {
+            // Copying shouldn't dismiss the report — the user may well want to read on.
+            args.Cancel = true;
+
             try
             {
                 var dataPackage = new DataPackage();
                 dataPackage.SetText(body);
                 Clipboard.SetContent(dataPackage);
-
-                copyButton.Content = "Copied!";
-                await Task.Delay(1500);
-                copyButton.Content = copyButtonText;
+                dialog.PrimaryButtonText = "Copied!";
             }
             catch
             {
-                copyButton.Content = "Couldn't copy";
+                dialog.PrimaryButtonText = "Couldn't copy";
+            }
+
+            _ = RestoreLabelAsync();
+
+            async Task RestoreLabelAsync()
+            {
+                await Task.Delay(1500);
+                dialog.PrimaryButtonText = copyButtonText;
             }
         };
-
-        dismissButton.Click += (_, _) => dialog.Hide();
 
         await dialog.ShowAsync();
     }
@@ -151,7 +173,15 @@ public static class ReportDialog
         var dialog = new ContentDialog
         {
             Title = title,
-            Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
+            // Bounded the same way as the report: a long folder path on a short window would
+            // otherwise push the buttons off the bottom.
+            Content = new ScrollViewer
+            {
+                Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
+                MaxHeight = AvailableContentHeight(xamlRoot, 300),
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            },
             PrimaryButtonText = thisFolderText,
             SecondaryButtonText = recursiveText,
             CloseButtonText = "Cancel",

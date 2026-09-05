@@ -601,88 +601,33 @@
 
             </Grid>
 
-            <!-- Sidebar Log Box + Generate Button split -->
-            <Grid>
-                <Border x:Name="SidebarLogShadowHost"
-                        Margin="16,321,16,16"
-                        VerticalAlignment="Stretch"
-                        HorizontalAlignment="Stretch"
-                        Translation="0,0,24"
-                        BorderThickness="0"
-                        CornerRadius="6">
-                    <Border.Shadow>
-                        <ThemeShadow x:Name="SidebarLogShadow" />
-                    </Border.Shadow>
-                </Border>
-
-                <!-- Textbox -->
-                <TextBox x:Name="SidebarLog"
-                         Margin="16,321,16,16"
-                         VerticalAlignment="Stretch"
-                         HorizontalAlignment="Stretch"
-                         BorderThickness="0"
-                         TextWrapping="Wrap"
-                         IsTabStop="False"
-                         TextAlignment="Center"
-                         HorizontalTextAlignment="Center"
-                         VerticalContentAlignment="Center"
-                         AcceptsReturn="True"
-                         IsReadOnly="True"
-                         Padding="0,8,0,0"
-                         AllowFocusOnInteraction="True"
-                         ScrollViewer.VerticalScrollBarVisibility="Auto"
-                         IsTextScaleFactorEnabled="False"
-                         ToolTipService.ToolTip="Relevant logs, click to copy!"
-                         CornerRadius="0,0,6,6" />
-                <Button x:Name="LogCopyButton"
-                        Background="Transparent"
-                        BorderBrush="Transparent"
-                        VerticalAlignment="Stretch"
-                        HorizontalAlignment="Stretch"
-                        Opacity="0.3"
-                        BorderThickness="0"
-                        Margin="16,321,32,16"
-                        Height="Auto"
-                        Width="Auto"
-                        Visibility="Visible"
-                        IsHitTestVisible="True"
-                        Canvas.ZIndex="999"
-                        CornerRadius="0,0,0,6"
-                        IsDoubleTapEnabled="True"
-                        Click="LogCopyButton_Click"/>
-
-                <!-- Overlay borders for the visual split -->
-                <Grid HorizontalAlignment="Stretch"
-                      VerticalAlignment="Top"
-                      Margin="16,315,16,0"
-                      IsHitTestVisible="False">
-                    <Rectangle Fill="{ThemeResource ButtonBackgroundThemeBrush}" />
-                    <Border BorderBrush="{ThemeResource FakeSplitButtonDarkBorderColor}"
-                            BorderThickness="0,3,0,0" />
-                </Grid>
-
-                <Grid HorizontalAlignment="Stretch"
-                      VerticalAlignment="Top"
-                      Margin="16,318,16,0"
-                      IsHitTestVisible="False">
-                    <Rectangle Fill="{ThemeResource ButtonBackgroundThemeBrush}" />
-                    <Border BorderBrush="{ThemeResource FakeSplitButtonBrightBorderColor}"
-                            BorderThickness="0,3,0,0" />
-                </Grid>
-
+            <!-- Generate button, the bevelled seam under it, and the log area.
+                 One grid with real rows rather than four siblings each pinned by a hand-tuned
+                 top margin (275 / 315 / 318 / 321) inside a row-less grid: the button's height
+                 now drives where the seam and log start, so resizing the button doesn't mean
+                 re-deriving three other numbers by hand. Renders identically. -->
+            <Grid Margin="16,275,16,16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <!-- Generate button -->
+                    <RowDefinition Height="3" />
+                    <!-- Dark half of the bevelled seam -->
+                    <RowDefinition Height="3" />
+                    <!-- Bright half -->
+                    <RowDefinition Height="*" />
+                    <!-- Log fills whatever is left -->
+                </Grid.RowDefinitions>
 
                 <!-- Generate Button -->
                 <Button x:Name="GenerateButton"
-                        Grid.Row="4"
-                        Content="Generate"
+                        Grid.Row="0"
                         ToolTipService.ToolTip="Begin generating PBR texture sets based on the selected folders and given parameters."
                         Click="GenerateButton_Click"
                         HorizontalAlignment="Stretch"
-                        VerticalAlignment="Top"
-                        Margin="16,275,16,0"
-                        CornerRadius="5, 5, 0 ,0"
+                        VerticalAlignment="Stretch"
+                        CornerRadius="5,5,0,0"
                         BorderThickness="0"
-                        Height="40">
+                        Height="46">
                     <Button.ContentTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal"
@@ -702,6 +647,78 @@
                     </Button.Shadow>
                 </Button>
 
+                <!-- Bevelled seam between the button and the log -->
+                <Grid Grid.Row="1"
+                      IsHitTestVisible="False">
+                    <Rectangle Fill="{ThemeResource ButtonBackgroundThemeBrush}" />
+                    <Border BorderBrush="{ThemeResource FakeSplitButtonDarkBorderColor}"
+                            BorderThickness="0,3,0,0" />
+                </Grid>
+
+                <Grid Grid.Row="2"
+                      IsHitTestVisible="False">
+                    <Rectangle Fill="{ThemeResource ButtonBackgroundThemeBrush}" />
+                    <Border BorderBrush="{ThemeResource FakeSplitButtonBrightBorderColor}"
+                            BorderThickness="0,3,0,0" />
+                </Grid>
+
+                <!-- Log area: shadow host, the textbox itself, the busy indicator, and the
+                     invisible click-to-copy button laid over it -->
+                <Border x:Name="SidebarLogShadowHost"
+                        Grid.Row="3"
+                        Translation="0,0,24"
+                        BorderThickness="0"
+                        CornerRadius="6">
+                    <Border.Shadow>
+                        <ThemeShadow x:Name="SidebarLogShadow" />
+                    </Border.Shadow>
+                </Border>
+
+                <TextBox x:Name="SidebarLog"
+                         Grid.Row="3"
+                         BorderThickness="0"
+                         TextWrapping="Wrap"
+                         IsTabStop="False"
+                         TextAlignment="Center"
+                         HorizontalTextAlignment="Center"
+                         VerticalContentAlignment="Center"
+                         AcceptsReturn="True"
+                         IsReadOnly="True"
+                         Padding="0,8,0,0"
+                         AllowFocusOnInteraction="True"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         IsTextScaleFactorEnabled="False"
+                         ToolTipService.ToolTip="Relevant logs, click to copy!"
+                         CornerRadius="0,0,6,6" />
+
+                <!-- Busy indicator. Collapsed unless something long-running is in flight, so it
+                     costs nothing visually the rest of the time; overlaid rather than given its
+                     own row so the log doesn't jump when work starts and stops. -->
+                <ProgressBar x:Name="SidelogProgressBar"
+                             Grid.Row="3"
+                             Margin="12,4,12,0"
+                             VerticalAlignment="Top"
+                             HorizontalAlignment="Stretch"
+                             Canvas.ZIndex="1000"
+                             IsIndeterminate="False"
+                             ShowPaused="False"
+                             ShowError="False"
+                             Visibility="Collapsed" />
+
+                <!-- Right margin leaves the log's own scrollbar clickable -->
+                <Button x:Name="LogCopyButton"
+                        Grid.Row="3"
+                        Background="Transparent"
+                        BorderBrush="Transparent"
+                        VerticalAlignment="Stretch"
+                        HorizontalAlignment="Stretch"
+                        Margin="0,0,16,0"
+                        Opacity="0.3"
+                        BorderThickness="0"
+                        Canvas.ZIndex="999"
+                        CornerRadius="0,0,0,6"
+                        IsDoubleTapEnabled="True"
+                        Click="LogCopyButton_Click" />
             </Grid>
         </Grid>
 

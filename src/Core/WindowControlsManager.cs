@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -17,7 +17,7 @@ public class WindowControlsManager
 {
     private static readonly HashSet<string> _globalExclusions = new()
     {
-        "DonateButton", "ChatButton", "CycleThemeButton", "SidebarLog",
+        "DonateButton", "ChatButton", "CycleThemeButton", "SidebarLog", "SidelogProgressBar",
     };
 
     // Reference-counted lock state, keyed by control INSTANCE (identity-based dictionary –

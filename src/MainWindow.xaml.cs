@@ -128,6 +128,10 @@ public sealed partial class MainWindow : Window
     private FrameworkElement? _rootElement;
     private CancellationTokenSource? _analysisCts;
 
+    // Drives the thin indeterminate bar at the top of the log while a long operation runs.
+    // Reference-counted, so overlapping callers can't switch each other's indicator off.
+    private readonly ProgressBarManager _progressManager;
+
 
     // ---------------------------------------| | | | | | | | | | |-------------------------------------------- \\
 
@@ -149,6 +153,8 @@ public sealed partial class MainWindow : Window
         }
 
         Instance = this;
+
+        _progressManager = new ProgressBarManager(SidelogProgressBar);
 
         Log($"Version: {appVersion}");
 
@@ -184,6 +190,7 @@ public sealed partial class MainWindow : Window
         Safely(() => { rotationTimer?.Stop(); rotationTimer = null; });
         Safely(() => { speedIncrementTimer?.Stop(); speedIncrementTimer = null; });
         Safely(() => { _analysisCts?.Cancel(); _analysisCts?.Dispose(); _analysisCts = null; });
+        Safely(() => _progressManager?.ForceHide());
 
         // Unhook everything hanging off the content tree. The theme listener in particular is the
         // one that used to outlive the window and keep firing at it.
@@ -408,7 +415,7 @@ public sealed partial class MainWindow : Window
                     new ReportDialog.Link("Create an issue on GitHub", "https://github.com/Cubeir/Texture-Set-Manager/issues"),
                     new ReportDialog.Link("Create a post on the Vanilla RTX Discord Server", "https://discord.gg/A4wv4wwYud"),
                 },
-                bodyMaxHeight: 200);
+                contentMaxHeight: 320);
         }
         catch { /* a failed crash report must never itself become a crash */ }
     }
@@ -889,7 +896,7 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            ToggleControls(this, false);
+            BeginLongOperation();
             var (success, message) = await Generate.GenerateTextureSetsAsync();
 
             Log(message, success ? LogLevel.Success : LogLevel.Error);
@@ -902,8 +909,27 @@ public sealed partial class MainWindow : Window
         {
             selectedFiles = null;
             selectedFolder = null;
-            ToggleControls(this, true);
+            EndLongOperation();
         }
+    }
+
+
+    /// <summary>
+    /// Locks the window and starts the busy indicator for the duration of a long operation.
+    /// Every one of these is destructive or file-touching, and letting a second one start while
+    /// the first is mid-run is how a folder gets stripped out from under an in-flight generate.
+    /// Always pair with <see cref="EndLongOperation"/> in a finally.
+    /// </summary>
+    private void BeginLongOperation()
+    {
+        ToggleControls(this, false);
+        _progressManager.ShowProgress();
+    }
+
+    private void EndLongOperation()
+    {
+        _progressManager.HideProgress();
+        ToggleControls(this, true);
     }
 
 
@@ -944,7 +970,7 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            ToggleControls(this, false);
+            BeginLongOperation();
             Log($"Inspecting texture sets in {folder}...", LogLevel.Lengthy);
 
             _analysisCts?.Cancel();
@@ -970,6 +996,10 @@ public sealed partial class MainWindow : Window
             // to act on is far too easy to scroll past in the sidebar.
             Log(summary, flagged ? LogLevel.Warning : LogLevel.Success);
 
+            // The work is done; reading the report isn't "busy", so stop the indicator before
+            // the dialog goes up. Controls stay locked until the dialog is dismissed.
+            _progressManager.HideProgress();
+
             await ReportDialog.ShowAsync(
                 Content.XamlRoot,
                 ((FrameworkElement)Content).ActualTheme,
@@ -992,7 +1022,7 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
-            ToggleControls(this, true);
+            EndLongOperation();
         }
     }
 
@@ -1031,7 +1061,7 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            ToggleControls(this, false);
+            BeginLongOperation();
             Log($"Stripping texture sets from {folder} ({(searchOption == SearchOption.AllDirectories ? "including subfolders" : "this folder only")})...", LogLevel.Lengthy);
 
             var result = await Task.Run(() => PbrStripper.Strip(folder, searchOption));
@@ -1055,7 +1085,7 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
-            ToggleControls(this, true);
+            EndLongOperation();
         }
     }
 
