@@ -253,7 +253,7 @@
                             FontSize="16"
                             Background="Transparent"
                             BorderBrush="Transparent"
-                            ToolTipService.ToolTip="Texture set tools"
+                            ToolTipService.ToolTip="Other texture set management tools"
                             IsTextScaleFactorEnabled="False">
                         <Button.Flyout>
                             <MenuFlyout Placement="Bottom">
