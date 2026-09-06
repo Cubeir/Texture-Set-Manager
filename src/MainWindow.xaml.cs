@@ -75,9 +75,9 @@ public static class EnvironmentVariables
 
     // Set Window size default for all windows
     public const int WindowSizeX = 750;
-    public const int WindowSizeY = 500;
+    public const int WindowSizeY = 450;
     public const int WindowMinSizeX = 640;
-    public const int WindowMinSizeY = 400;
+    public const int WindowMinSizeY = 395;
 
     // Saves persistent variables
     public static void SaveSettings()
