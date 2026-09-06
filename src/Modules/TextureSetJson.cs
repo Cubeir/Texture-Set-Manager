@@ -6,11 +6,10 @@ namespace Texture_Set_Manager.Modules;
 // ══════════════════════════════════════════════════════════════════════════════
 //  Texture set JSON  ──  shared options and the source-generated write model
 // ══════════════════════════════════════════════════════════════════════════════
-//
 // Release builds publish trimmed (see PublishTrimmed in the csproj), and reflection-based
 // System.Text.Json is exactly the kind of thing that survives a Debug run and then throws
 // "no metadata for type" in the user's hands. So: everything this app *writes* goes through
-// the source-generated context below (no reflection, nothing for the trimmer to remove), and
+// the source-generated context below (no reflection, no latent trim-induced bugs), and
 // everything it *reads* goes through the JsonNode/JsonDocument DOM, which never needs type
 // metadata at all.
 

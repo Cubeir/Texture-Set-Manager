@@ -9,7 +9,7 @@ namespace Texture_Set_Manager.Core;
 
 public sealed partial class ReviewPromptControl : UserControl
 {
-    public event EventHandler Closed;
+    public event EventHandler? Closed;
 
     public ReviewPromptControl()
     {
@@ -79,6 +79,7 @@ public sealed partial class ReviewPromptControl : UserControl
 public static class ReviewPromptManager
 {
     private const string FIRST_LAUNCH_KEY = "ReviewPromptFirstLaunchTime";
+
     // Keyed by version so "don't show again" lapses on a Major or Minor update (not on new
     // builds/revisions) – a user who dismissed the prompt two feature releases ago is a
     // reasonable person to ask once more.

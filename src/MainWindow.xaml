@@ -601,11 +601,7 @@
 
             </Grid>
 
-            <!-- Generate button, the bevelled seam under it, and the log area.
-                 One grid with real rows rather than four siblings each pinned by a hand-tuned
-                 top margin (275 / 315 / 318 / 321) inside a row-less grid: the button's height
-                 now drives where the seam and log start, so resizing the button doesn't mean
-                 re-deriving three other numbers by hand. Renders identically. -->
+            <!-- Generate button, the bevelled seam under it connecting it to the Log area -->
             <Grid Margin="16,275,16,16">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />

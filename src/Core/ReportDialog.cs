@@ -22,8 +22,8 @@ public static class ReportDialog
     public sealed record Link(string Text, string Uri);
 
     /// <summary>
-    /// Room a ContentDialog needs for its own chrome — title, padding, and the pinned button
-    /// row — before any of the height is available to content. Deliberately generous: guessing
+    /// Room a ContentDialog needs for its own chrome – title, padding, and the pinned button
+    /// row – before any of the height is available to content. Deliberately generous: guessing
     /// too high costs a little scrolling, guessing too low puts controls off-screen.
     /// </summary>
     private const double DialogChromeHeight = 220;
@@ -101,7 +101,7 @@ public static class ReportDialog
         // Everything scrolls together inside a height the current window can actually show.
         // Previously only the body scrolled and the buttons lived in the content, so on a short
         // window the dialog simply grew past the bottom of the screen and the close button became
-        // unreachable with nothing to scroll — the user had to resize the window to escape.
+        // unreachable with nothing to scroll – the user had to resize the window to escape.
         var scroller = new ScrollViewer
         {
             Content = panel,
@@ -126,7 +126,7 @@ public static class ReportDialog
 
         dialog.PrimaryButtonClick += (sender, args) =>
         {
-            // Copying shouldn't dismiss the report — the user may well want to read on.
+            // Copying shouldn't dismiss the report – the user may well want to read on.
             args.Cancel = true;
 
             try

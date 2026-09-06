@@ -23,14 +23,6 @@ public static class Helpers
 
             var bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
 
-            // This loop used to call sourcePixels.GetPixel(x, y) - a native ImageMagick call
-            // per pixel - AND bitmap.SetPixel(x, y, ...) - a native GDI+ call per pixel. Both
-            // are now a single bulk native call on each side: GetValues() fetches every channel
-            // of every pixel at once (the returned array's length is exactly
-            // width * height * channelCount, in the same row-major, channel-interleaved order
-            // that indexing a single GetPixel(x,y) result already used), and FastBitmap replaces
-            // the GDI+ side. The decode logic itself - every ColorType branch, the >>8
-            // truncation, maxOpacity - is untouched; only how raw channel values are fetched.
             using (var sourcePixels = sourceImage.GetPixels())
             using (var fb = new FastBitmap(bitmap, writable: true))
             {
@@ -161,9 +153,7 @@ public static class Helpers
             writer.Write((byte)32);       // Pixel Depth (32-bit RGBA)
             writer.Write((byte)8);        // Image Descriptor (default origin, 8-bit alpha)
 
-            // Was bitmap.GetPixel(x, y) per pixel - every TGA save (the majority format for
-            // RTX PBR packs) paid for that. FastBitmap bulk-copies the whole buffer once via
-            // LockBits/Marshal.Copy, then reads are plain array indexing.
+            // FastBitmap bulk-copies the whole buffer once via LockBits/Marshal.Copy, then reads are plain array indexing.
             using var fb = new FastBitmap(bitmap, writable: false);
 
             for (var y = height - 1; y >= 0; y--) // TGA is bottom-up by default
@@ -232,7 +222,7 @@ public static class Helpers
                     WriteImageAsTGA(bmp, newPath);
                 }
 
-                // Restore original timestamp so pack diffing tools don't see a spurious change
+                // Restore original timestamp so diffing tools don't see a spurious change
                 File.SetLastWriteTime(newPath, origTime);
 
                 try
@@ -257,7 +247,6 @@ public static class Helpers
         return results;
     }
 }
-
 
 /// <summary>
 /// Additional helper to do a thing only once per runtime, use RuntimeFlags.Set("key") to set a flag with a unique key.
