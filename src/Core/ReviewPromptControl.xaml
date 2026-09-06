@@ -42,7 +42,7 @@
                            LineHeight="20"
                            TextAlignment="Center"
                            Foreground="{ThemeResource TextFillColorPrimaryBrush}">
-                    <Run Text="Have you found Texture Set Manager useful? Support my projects through a" />
+                    <Run Text="Has Texture Set Manager been valuable to you? Consider supporting my projects through a" />
                     <Hyperlink x:Name="DonationLink"
                                UnderlineStyle="None">
                         <Run Text="donation"
@@ -55,21 +55,39 @@
                 <StackPanel Orientation="Horizontal"
                             Spacing="8"
                             HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
                             Margin="0,8,0,0">
                     <Button x:Name="ReviewButton"
-                            Content="⭐ Leave a review"
+                            Content="Leave a review ⭐"
                             Padding="16,8"
-                            MinWidth="130" />
+                            FontWeight="SemiBold"
+                            MinWidth="130"
+                            Translation="0,0,24">
+                        <Button.Shadow>
+                            <ThemeShadow />
+                        </Button.Shadow>
+                    </Button>
 
                     <Button x:Name="LaterButton"
                             Content="Show later"
                             Padding="16,8"
-                            MinWidth="100" />
+                            FontWeight="Medium"
+                            MinWidth="100"
+                            Translation="0,0,24">
+                        <Button.Shadow>
+                            <ThemeShadow />
+                        </Button.Shadow>
+                    </Button>
 
                     <Button x:Name="NeverButton"
                             Content="Don't show again"
                             Padding="16,8"
-                            MinWidth="140" />
+                            MinWidth="140"
+                            Translation="0,0,24">
+                        <Button.Shadow>
+                            <ThemeShadow />
+                        </Button.Shadow>
+                    </Button>
                 </StackPanel>
             </StackPanel>
         </Border>
