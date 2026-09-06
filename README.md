@@ -1,5 +1,5 @@
 # Texture Set Manager
-Feature-rich automation tool for Minecraft Bedrock Edition resource pack authors to generate texture sets for RTX or Vibrant Visuals.
+Feature-rich automation tool for Minecraft Bedrock Edition resource pack authors to generate and manage PBR texture sets for RTX or Vibrant Visuals.
 
 <!-- Microsoft Store badge -->
 <p align="center">
@@ -9,18 +9,18 @@ Feature-rich automation tool for Minecraft Bedrock Edition resource pack authors
 </p>
 <!-- Cover image -->
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/3a1b5d90-7720-4412-9d72-4a0fa64f6827" alt="texture-set-manager-cover"/>
+  <img alt="texture-set-manager-cover" src="https://github.com/user-attachments/assets/234b9414-aae1-4ba1-9e4b-31ef4ebd182d" />
 </p>
 <!-- Badges -->
 <p align="center">
   <a href="https://discord.gg/A4wv4wwYud">
-    <img src="https://img.shields.io/discord/721377277480402985?style=flat-square&logo=discord&logoColor=F4E9D3&label=Discord&color=F4E9D3&cacheSeconds=3600"/>
+    <img src="https://img.shields.io/discord/721377277480402985?style=flat-square&logo=discord&logoColor=5865f1&label=Discord&color=5865f1&cacheSeconds=3600"/>
   </a>
   <a href="https://ko-fi.com/cubeir">
-    <img src="https://img.shields.io/badge/-support%20my%20work-F4E9D3?style=flat-square&logo=ko-fi&logoColor=F4E9D3&labelColor=555555"/>
+    <img src="https://img.shields.io/badge/-support%20my%20work-FF5A16?style=flat-square&logo=ko-fi&logoColor=FF5A16&labelColor=555555"/>
   </a>
-  <img src="https://img.shields.io/github/repo-size/Cubeir/Texture-Set-Manager?style=flat-square&color=F4E9D3&label=Repo%20Size&cacheSeconds=3600"/>
-  <img src="https://img.shields.io/github/last-commit/Cubeir/Texture-Set-Manager?style=flat-square&color=F4E9D3&label=Last%20Commit&cacheSeconds=1800"/>
+  <img src="https://img.shields.io/github/repo-size/Cubeir/Texture-Set-Manager?style=flat-square&color=00A560&label=Repo%20Size&cacheSeconds=3600"/>
+  <img src="https://img.shields.io/github/last-commit/Cubeir/Texture-Set-Manager?style=flat-square&color=006DB2&label=Last%20Commit&cacheSeconds=1800"/>
 </p>
 
 # Overview
@@ -49,22 +49,22 @@ If you need more info, check out the [official Bedrock Edition PBR documentation
 
 ## Other texture set management tools in the title bar
 
-The developer-tools button in the title bar opens a menu with two tools that work on an existing pack rather than generating a new one. Both ask for a folder first.
+The developer-tools button in the title bar opens a menu with two tools that work on an existing pack rather than generating texture sets. Both ask for a folder first.
 
 ### Analyze texture sets
 Reads every `*.texture_set.json` in the chosen folder and all of its subfolders, then compares each MER/MERS, normal and heightmap against the color texture of its own set. Any PBR texture that is still **pixel-for-pixel identical to its color texture** is flagged – those are almost always template copies that never got painted by an artist, which produce nonsense PBR data in-game and quietly bloat the pack. Texture sets that reference a file which doesn't exist are reported too.
 
-The result opens in a dialog with a copy button and is also written to the log. This tool only reads: it never modifies or deletes anything.
+The result opens in a dialog with a copy button to copy the report. which is also written to the log. This tool only reads: it never modifies or deletes anything from your PBR texture pack, just gives a way to quickly verify everything's touched by an artist and in its place.
 
 ### Strip all texture sets
 Deletes every texture set in the chosen folder along with the MER/MERS, normal and heightmap textures those sets reference, leaving **only your color textures**. Useful for starting a pack's PBR over from scratch, or for clearing out a pack that declares PBR support but ships little real PBR content.
 
-Before anything is deleted you're asked whether to strip just that folder or to include its subfolders – that prompt is also the confirmation step, and cancelling is its default. **There is no undo**, so take a backup first if you're unsure.
+Before anything is deleted you're asked whether to strip just that folder or to include its subfolders – that prompt doubles as the confirmation step, and cancelling is its default, because this is a destructive action, make sure you create backups.
 
-It only ever deletes what a texture set actually resolved to as a PBR layer – never a name-pattern sweep. That matters: plenty of legitimate *color* textures end in `_normal` (`sandstone_normal`, `rail_turned_normal`) where "normal" means the ordinary variant of a block, and guessing by suffix would delete those outright.
+> It only ever deletes what a texture set actually resolved to as a PBR layer – never a name-pattern sweep. That matters: plenty of legitimate *color* textures end in `_normal` (`sandstone_normal`, `rail_turned_normal`) where "normal" means the ordinary variant of a block, and guessing by suffix would have deleted those outright.
 
 ---
 
 For app support, head over to the [Vanilla RTX Discord](https://discord.gg/A4wv4wwYud) server's forum channel, or open an issue here.
 Click the log section beneath the generate button to copy debug logs, plenty useful to attach these when reporting issues!
-If the app ever crashes, it writes a report and shows it to you on the next launch with a button to copy it – attaching that makes a bug easier to fix.
+If the app ever crashes, it writes a report and shows it to you on the next launch with a button to copy it, attaching that makes a bug easier to fix as well.
