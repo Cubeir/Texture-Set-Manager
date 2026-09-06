@@ -48,7 +48,7 @@ public static class Generate
                 Trace.WriteLine("=== PHASE 2: Creating Backups ===");
 
                 // Backup selected files
-                if (hasFiles)
+                if (hasFiles && selectedFiles != null)
                 {
                     bool fileBackupSuccess = await BackupFilesAsync(selectedFiles);
                     if (!fileBackupSuccess)
@@ -80,7 +80,7 @@ public static class Generate
             var filesList = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             // Add selected files
-            if (hasFiles)
+            if (hasFiles && selectedFiles != null)
             {
                 foreach (var file in selectedFiles)
                 {
@@ -129,7 +129,7 @@ public static class Generate
                 foreach (var file in filesList)
                 {
                     string nameWithoutExt = Path.GetFileNameWithoutExtension(file);
-                    string directory = Path.GetDirectoryName(file);
+                    string directory = Path.GetDirectoryName(file)!;
 
                     // Check for _mer, _mers, _heightmap suffixes
                     if (nameWithoutExt.EndsWith("_mer", StringComparison.OrdinalIgnoreCase) ||
