@@ -28,6 +28,10 @@ using static Texture_Set_Manager.EnvironmentVariables.Persistent;
 
 namespace Texture_Set_Manager;
 
+/// <summary>
+/// Hosts the Persistent and Default variables where it mattered for it to persist between sessons,
+/// or for defaults to remain accessible, as well as the methods to save and load these variables
+/// </summary>
 public static class EnvironmentVariables
 {
     private static readonly Windows.ApplicationModel.PackageVersion _version = App.GetPackageVersion();
